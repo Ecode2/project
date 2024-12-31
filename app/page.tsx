@@ -1,15 +1,23 @@
+"use client"
 import { Button } from "@/components/ui/button";
 import { BookCard } from "@/components/book-card";
 import { SearchBar } from "@/components/search-bar";
+import { useUser } from "@/hooks/use-auth";
 
 export default function Home() {
+  const user = useUser();
+
   return (
     <div className="container px-4 py-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Discover Books</h1>
-        <Button variant="ghost" size="sm" asChild>
-          <a href="/auth">Sign In</a>
-        </Button>
+        {user ? <Button variant="ghost" size="sm" asChild>
+                  <a href="/auth">Sign In</a>
+                </Button> :
+                <Button variant="ghost" size="sm" asChild>
+                  <a href="/auth">Logout</a>
+                </Button>
+        }
       </div>
       
       <SearchBar />

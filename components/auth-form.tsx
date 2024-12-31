@@ -13,6 +13,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { useSignUp, useLogin, useLogout } from "@/hooks/use-auth";
 
 const formSchema = z.object({
   email: z.string().email(),
@@ -34,15 +35,27 @@ export function AuthForm({ isSignIn }: AuthFormProps) {
     },
   });
 
+  const login = useLogin();
+  const register = useSignUp();
+
   function onSubmit(values: z.infer<typeof formSchema>) {
     console.log(values);
+    if(isSignIn) {
+      if (login) {
+        login(values.username || "", values.password);
+      }
+    }else {
+      if (register) {
+        register(values.username || "", values.email, values.password);
+      }
+    }
+    
   }
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        {!isSignIn && (
-          <FormField
+        <FormField
             control={form.control}
             name="username"
             render={({ field }) => (
@@ -55,8 +68,8 @@ export function AuthForm({ isSignIn }: AuthFormProps) {
               </FormItem>
             )}
           />
-        )}
-        <FormField
+        {!isSignIn && (
+          <FormField
           control={form.control}
           name="email"
           render={({ field }) => (
@@ -69,6 +82,7 @@ export function AuthForm({ isSignIn }: AuthFormProps) {
             </FormItem>
           )}
         />
+        )}
         <FormField
           control={form.control}
           name="password"
