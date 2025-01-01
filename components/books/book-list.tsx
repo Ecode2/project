@@ -9,7 +9,6 @@ export const BookList = () => {
     const [books, setBooks] = useState<BookListResponse | null>(null);
     const router = useRouter();
 
-    console.log("books", books)
 
     useEffect(() => {
         const handleBooks = async () => {
@@ -19,7 +18,6 @@ export const BookList = () => {
                 setBooks(data.message);
             }
             }
-            console.log("life aint easy", data)
         }
 
         handleBooks();

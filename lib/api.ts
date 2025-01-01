@@ -1,47 +1,72 @@
+import { AxiosError } from "axios";
 import { AllBookPage, BookCoverResponse, BookListResponse, LoginInfo, OneBookPage, RegisterInfo, UserInfo } from "@/lib/definitions"
 import api from "@/lib/axiosInstance"
 
 export async function checkToken() {
-
 	const token = localStorage.getItem("access_token");
 
-	if (typeof token !== 'string') { return { status: false, message: "Access Token Not found or recognised" } }
+	if (typeof token !== 'string') {
+		localStorage.removeItem("access_token");
+		localStorage.removeItem("refresh_token");
+		localStorage.removeItem('user');
+		return { status: false, message: "Access Token Not found or recognised" };
+	}
 
 	try {
 		const response = await api.post(`/auth/token/verify/`, {
 			token: token.slice(7)
-		})
+		});
 
-		if (response.status == 200) { return { status: true, message: "Access Token Verified" } }
-
-		if (response.status != 200 && response.status != 401) {
-			localStorage.removeItem("access_token")
-			return { status: false, message: "Access Token not Valid" }
+		if (response.status === 200) {
+			return { status: true, message: "Access Token Verified" };
 		}
-
-		const refresh_token = localStorage.getItem("refresh_token");
-		if (typeof refresh_token !== 'string') { return { status: false, message: "Unauthorised access, Relogin" } }
-
-		const refresh_response = await api.post(`/auth/token/refresh/`, {
-			refresh: refresh_token
-		})
-
-		if (response.status != 200) {
-			localStorage.removeItem("access_token")
-			localStorage.getItem("refresh_token");
-			return { status: false, message: "Unauthorised access, Relogin" }
-		}
-
-		const data = refresh_response.data
-
-		localStorage.setItem("access_token", data.access)
-		return { status: true, message: "Access Token Verified" }
-
-
 	} catch (error) {
-		return { status: false, message: "An error occured" }
+		const axiosError = error as AxiosError;
+
+		if (axiosError.response && axiosError.response.status === 401) {
+			const refresh_token = localStorage.getItem("refresh_token");
+
+			if (typeof refresh_token !== 'string') {
+				return { status: false, message: "Unauthorized access, Relogin" };
+			}
+
+			try {
+				const refresh_response = await api.post(`/auth/token/refresh/`, {
+					refresh: refresh_token
+				});
+
+				if (refresh_response.status === 200) {
+					const data = refresh_response.data;
+					localStorage.setItem("access_token", `Bearer ${data.access}`);
+					return { status: true, message: "Access Token Verified" };
+				} else {
+					localStorage.removeItem("access_token");
+					localStorage.removeItem("refresh_token");
+					localStorage.removeItem('user');
+					return { status: false, message: "Access Token not Valid" };
+				}
+			} catch (refreshError) {
+				const refreshAxiosError = refreshError as AxiosError;
+
+				if (refreshAxiosError.response && refreshAxiosError.response.status === 401) {
+					localStorage.removeItem("access_token");
+					localStorage.removeItem("refresh_token");
+					localStorage.removeItem('user');
+					return { status: false, message: "Unauthorized access, Relogin" };
+				} else {
+					localStorage.removeItem("access_token");
+					localStorage.removeItem("refresh_token");
+					localStorage.removeItem('user');
+					return { status: false, message: "Access Token not Valid" };
+				}
+			}
+		} else {
+			localStorage.removeItem("access_token");
+			return { status: false, message: "Access Token not Valid" };
+		}
 	}
 
+	return { status: false, message: "Access Token not Valid" };
 }
 
 export const userInfo = async () => {
@@ -52,7 +77,7 @@ export const userInfo = async () => {
 		const userInfo: UserInfo = JSON.parse(user)
 
 		return {
-			status: false,
+			status: true,
 			message: userInfo
 		}
 	}
@@ -112,6 +137,7 @@ export const login = async (userInfo: LoginInfo) => {
 
 		const data = response.data
 		localStorage.setItem("access_token", `Bearer ${data.access}`);
+		localStorage.setItem("refresh_token", `${data.refresh}`);
 
 		return {
 			status: true,
@@ -145,7 +171,7 @@ export const register = async (userInfo: RegisterInfo) => {
 
 		const data = response.data
 		localStorage.setItem("access_token", `Bearer ${data.access}`);
-		localStorage.setItem("access_token", `Bearer ${data.refresh}`);
+		localStorage.setItem("refresh_token", `${data.refresh}`);
 
 		return {
 			status: true,
@@ -163,14 +189,15 @@ export const ListPublicbooks = async () => {
 	const token = localStorage.getItem("access_token");
 
 	try {
-		const response = token ? 
-			await api.get(`/books/`) : 
+		const response = token ?
 			await api.get(`/books/`,
-				{headers: {
-					"Authorization": token
-				}}
-			)
-			
+				{
+					headers: {
+						"Authorization": token
+					}
+				}) :
+			await api.get(`/books/`)
+
 		if (response.status != 200) { return { status: false, message: "Something went wrong" } }
 
 		const data: BookListResponse = response.data
@@ -187,17 +214,17 @@ export const ListPublicbooks = async () => {
 	}
 }
 
-export const GetBookInfo = async (id: number)=> {
+export const GetBookInfo = async (id: number) => {
 	const token = localStorage.getItem("access_token");
 
 	try {
-		const response = token ? 
-			await api.get(`/books/`) :
-			await api.get(`/books/`,
-				{headers: {
+		const response = token ?
+			await api.get(`/books/`, {
+				headers: {
 					"Authorization": token
-				}}
-			)
+				}
+			}) :
+	 		await api.get(`/books/`)
 
 		if (response.status != 200) { return { status: false, message: "Something went wrong" } }
 
@@ -208,23 +235,23 @@ export const GetBookInfo = async (id: number)=> {
 			message: data,
 		}
 
-	} catch (error){
+	} catch (error) {
 		console.log("an error", error)
 		return { status: false, message: "Something went wrong" }
 	}
 }
 
-export const GetOnePage = async (id: number, page:number) => {
+export const GetOnePage = async (id: number, page: number) => {
 	const token = localStorage.getItem("access_token");
 
 	try {
-		const response = token ? 
-			await api.get(`/books/${id}/read-page/?page=${page}`) :
-			await api.get(`/books/${id}/read-page/?page=${page}`,
-				{headers: {
+		const response = token ?
+			await api.get(`/books/${id}/read-page/?page=${page}`, {
+				headers: {
 					"Authorization": token
-				}}
-			)
+				}
+			}) :
+			await api.get(`/books/${id}/read-page/?page=${page}`)
 
 		if (response.status != 200) { return { status: false, message: "Something went wrong" } }
 
@@ -235,23 +262,24 @@ export const GetOnePage = async (id: number, page:number) => {
 			message: data,
 		}
 
-	} catch (error){
+	} catch (error) {
 		console.log("an error", error)
 		return { status: false, message: "Something went wrong" }
 	}
 }
 
-export const GetAllPage = async (id: number, page:number) => {
+export const GetAllPage = async (id: number, page: number) => {
 	const token = localStorage.getItem("access_token");
 
 	try {
-		const response = token ? 
-			await api.get(`/books/${id}/pages/`) :
-			await api.get(`/books/${id}/pages/`,
-				{headers: {
+		const response = token ?
+
+			await api.get(`/books/${id}/pages/`, {
+				headers: {
 					"Authorization": token
-				}}
-			)
+				}
+			}) :
+			await api.get(`/books/${id}/pages/`)
 
 		if (response.status != 200) { return { status: false, message: "Something went wrong" } }
 
@@ -262,7 +290,7 @@ export const GetAllPage = async (id: number, page:number) => {
 			message: data,
 		}
 
-	} catch (error){
+	} catch (error) {
 		console.log("an error", error)
 		return { status: false, message: "Something went wrong" }
 	}

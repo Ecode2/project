@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
+import * as z from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -28,18 +29,27 @@ interface AuthFormProps {
 
 export function AuthForm({ isSignIn }: AuthFormProps) {
   const router = useRouter();
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      email: "",
-      password: "",
-      username: "",
-    },
-  });
-
   const { login, register } = useAuth();
 
-  async function onSubmit(values: z.infer<typeof formSchema>) {
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+    username: "",
+  });
+
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: formData,
+  });
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData({ ...formData, [name]: value });
+  };
+
+  const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const values = formData;
     try {
       if (isSignIn) {
         if (login) {
@@ -55,11 +65,11 @@ export function AuthForm({ isSignIn }: AuthFormProps) {
       console.error("Authentication failed:", error);
       // Handle error, e.g., show a notification
     }
-  }
+  };
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+      <form onSubmit={handleFormSubmit} className="space-y-4">
         {!isSignIn && (
           <FormField
             control={form.control}
@@ -68,7 +78,12 @@ export function AuthForm({ isSignIn }: AuthFormProps) {
               <FormItem>
                 <FormLabel>Username</FormLabel>
                 <FormControl>
-                  <Input placeholder="johndoe" {...field} />
+                  <Input
+                    placeholder="johndoe"
+                    {...field}
+                    value={formData.username}
+                    onChange={handleInputChange}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -86,6 +101,8 @@ export function AuthForm({ isSignIn }: AuthFormProps) {
                   placeholder="example@email.com"
                   type="email"
                   {...field}
+                  value={formData.email}
+                  onChange={handleInputChange}
                 />
               </FormControl>
               <FormMessage />
@@ -99,7 +116,13 @@ export function AuthForm({ isSignIn }: AuthFormProps) {
             <FormItem>
               <FormLabel>Password</FormLabel>
               <FormControl>
-                <Input placeholder="••••••••" type="password" {...field} />
+                <Input
+                  placeholder="••••••••"
+                  type="password"
+                  {...field}
+                  value={formData.password}
+                  onChange={handleInputChange}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
