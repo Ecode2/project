@@ -2,11 +2,15 @@
 import { createContext, useState,  ReactNode } from 'react';
 import { login as apiLogin, register as apiRegister, userInfo } from '@/lib/api';
 import { UserInfo, LoginInfo, RegisterInfo } from '@/lib/definitions';
+import {AuthContextType} from "@/lib/definitions"
 
-export const AuthContext = createContext<{ user: UserInfo | null, login: (email: string, password: string) => Promise<void>, register: (username: string, email: string, password: string) => Promise<void>, logout: () => void } | undefined>(undefined);
+export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const AuthProvider = ({children}:{ children: ReactNode }) => {
   const [user, setUser] = useState<UserInfo | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false)
+
+  
 
   const login = async (email:string, password:string) => {
 
@@ -19,6 +23,7 @@ const AuthProvider = ({children}:{ children: ReactNode }) => {
 
       if (user.status && typeof user.message !== 'string') {
         setUser(user.message);
+        setIsAuthenticated(true);
       }
     }
   };
@@ -34,6 +39,7 @@ const AuthProvider = ({children}:{ children: ReactNode }) => {
 
       if (user.status && typeof user.message !== 'string') {
         setUser(user.message);
+        setIsAuthenticated(true);
       }
     }
   };
@@ -42,10 +48,11 @@ const AuthProvider = ({children}:{ children: ReactNode }) => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     setUser(null);
+    setIsAuthenticated(false);
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

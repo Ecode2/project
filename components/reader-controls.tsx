@@ -16,6 +16,8 @@ interface ReaderControlsProps {
   show: boolean;
   fontSize: number;
   onFontSizeChange: (value: number[]) => void;
+  onPrevPage: () => void;
+  onNextPage: () => void;
   currentPage: number;
   totalPages: number;
 }
@@ -24,6 +26,8 @@ export function ReaderControls({
   show,
   fontSize,
   onFontSizeChange,
+  onPrevPage,
+  onNextPage,
   currentPage,
   totalPages,
 }: ReaderControlsProps) {
@@ -67,14 +71,14 @@ export function ReaderControls({
         }`}
       >
         <div className="container max-w-2xl mx-auto flex justify-between items-center">
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" onClick={onPrevPage}>
             <ChevronLeft className="h-4 w-4 mr-2" />
             Previous
           </Button>
           <span className="text-sm text-muted-foreground">
             Page {currentPage} of {totalPages}
           </span>
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm"  onClick={onNextPage}>
             Next
             <ChevronRight className="h-4 w-4 ml-2" />
           </Button>

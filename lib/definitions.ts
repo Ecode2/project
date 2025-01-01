@@ -15,20 +15,45 @@ export type UserInfo = {
     email: string
   }
 
-export type Results = {
+
+export interface BookCoverResponse {
     id: number,
-    name: string,
-    token: string
+    title: string,
+    description: string | null,
+    user: string,
+    author: string | null,
+    production_year: number | null,
+    status: string,
+    total_page: number | null,
+    updated_at: string,
+    created_at: string,
+    book_cover: string
 }
 
-export type ListResponse = {
+export type BookListResponse = {
     count: string,
     next: string | null,
     previous: string | null,
-    results: Results[]
+    results: BookCoverResponse[]
 }
+
+export type OneBookPage = {
+    [pageNumber: string]: string;
+}
+
+export type AllBookPage = OneBookPage[]
+
 
 export type ApiResponse = {
     status: boolean,
     message: any,
 }
+
+export interface AuthContextType {
+    user: UserInfo | null,
+    isAuthenticated: boolean;
+    login: (email: string, password: string) => Promise<void>, 
+    register: (username: string, email: string, password: string) => Promise<void>, 
+    logout: () => void
+  }
+

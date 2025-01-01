@@ -60,6 +60,10 @@ const config: Config = {
           '4': 'hsl(var(--chart-4))',
           '5': 'hsl(var(--chart-5))',
         },
+        reader_bg: "#dee2ff",
+				reader_dark: "#dee2e6",
+				reader_light: "#343a40",
+				reader_bg_dark: "#212529",
       },
       keyframes: {
         'accordion-down': {

@@ -1,22 +1,29 @@
 "use client"
 import { Button } from "@/components/ui/button";
-import { BookCard } from "@/components/book-card";
 import { SearchBar } from "@/components/search-bar";
-import { useUser } from "@/hooks/use-auth";
+import { useAuth } from "@/hooks/use-auth";
+import { BookList } from "@/components/books/book-list";
 
-export default function Home() {
-  const user = useUser();
+const Home = () => {
+  const {user, isAuthenticated, logout} = useAuth();
+
+  const handleLogout = () => {
+    logout()
+  }
+
+  console.log(user, isAuthenticated)
 
   return (
     <div className="container px-4 py-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Discover Books</h1>
-        {user ? <Button variant="ghost" size="sm" asChild>
-                  <a href="/auth">Sign In</a>
-                </Button> :
+        {isAuthenticated ? 
+                <Button variant="ghost" size="sm" onClick={handleLogout} asChild>
+                  <a>Logout</a>
+                </Button>:
                 <Button variant="ghost" size="sm" asChild>
-                  <a href="/auth">Logout</a>
-                </Button>
+                  <a href="/auth">Sign In</a>
+                </Button> 
         }
       </div>
       
@@ -24,14 +31,11 @@ export default function Home() {
       
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
         {/* Placeholder for book cards */}
-        <BookCard
-          title="The Great Gatsby"
-          author="F. Scott Fitzgerald"
-          coverUrl="https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&q=80&w=400"
-          progress={65}
-        />
+        <BookList />
         {/* Add more BookCard components */}
       </div>
     </div>
   );
 }
+
+export default Home;

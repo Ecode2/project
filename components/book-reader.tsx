@@ -7,6 +7,7 @@ interface BookReaderProps {
   currentPage: number;
   onPageChange: (page: number) => void;
   onClick: () => void;
+  bookId: number
 }
 
 export function BookReader({
@@ -14,13 +15,14 @@ export function BookReader({
   currentPage,
   onPageChange,
   onClick,
+  bookId,
 }: BookReaderProps) {
   return (
     <div
       onClick={onClick}
       className={cn(
         "prose dark:prose-invert mx-auto max-w-none",
-        "bg-white dark:bg-gray-900",
+        "bg-reader_bg text-reader_light dark:bg-reader_bg_dark dark:text-reader_dark",
         "p-8 sm:p-12 rounded-lg shadow-lg",
         "transition-all duration-200 ease-in-out"
       )}

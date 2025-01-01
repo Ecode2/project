@@ -13,7 +13,8 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { useSignUp, useLogin, useLogout } from "@/hooks/use-auth";
+import { useAuth } from "@/hooks/use-auth";
+import { useRouter } from "next/navigation";
 
 const formSchema = z.object({
   email: z.string().email(),
@@ -26,6 +27,7 @@ interface AuthFormProps {
 }
 
 export function AuthForm({ isSignIn }: AuthFormProps) {
+  const router = useRouter();
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -35,27 +37,31 @@ export function AuthForm({ isSignIn }: AuthFormProps) {
     },
   });
 
-  const login = useLogin();
-  const register = useSignUp();
+  const { login, register } = useAuth();
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    console.log(values);
-    if(isSignIn) {
-      if (login) {
-        login(values.username || "", values.password);
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    try {
+      if (isSignIn) {
+        if (login) {
+          await login(values.email, values.password);
+        }
+      } else {
+        if (register) {
+          await register(values.username || "", values.email, values.password);
+        }
       }
-    }else {
-      if (register) {
-        register(values.username || "", values.email, values.password);
-      }
+      router.push("/");
+    } catch (error) {
+      console.error("Authentication failed:", error);
+      // Handle error, e.g., show a notification
     }
-    
   }
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <FormField
+        {!isSignIn && (
+          <FormField
             control={form.control}
             name="username"
             render={({ field }) => (
@@ -68,21 +74,24 @@ export function AuthForm({ isSignIn }: AuthFormProps) {
               </FormItem>
             )}
           />
-        {!isSignIn && (
-          <FormField
+        )}
+        <FormField
           control={form.control}
           name="email"
           render={({ field }) => (
             <FormItem>
               <FormLabel>Email</FormLabel>
               <FormControl>
-                <Input placeholder="example@email.com" type="email" {...field} />
+                <Input
+                  placeholder="example@email.com"
+                  type="email"
+                  {...field}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-        )}
         <FormField
           control={form.control}
           name="password"
