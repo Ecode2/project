@@ -1,3 +1,5 @@
+import * as z from "zod";
+
 export type LoginInfo = {
     email : string,
     password : string
@@ -56,4 +58,19 @@ export interface AuthContextType {
     register: (username: string, email: string, password: string) => Promise<void>, 
     logout: () => void
   }
+
+
+export const formSchema = z.object({
+    title: z.string().min(1, "Title is required"),
+    author: z.string().min(1, "Author is required"),
+    description: z.string().optional(),
+    book: z
+        .any()
+        .refine((file) => file?.length === 1, "Book file is required")
+        .refine((file) => file?.[0]?.type === "application/pdf", "File must be a PDF"),
+    publication_year: z.string().optional(),
+    isPublic: z.boolean().optional(),
+});
+
+export type FormSchemaData = z.infer<typeof formSchema>;
 

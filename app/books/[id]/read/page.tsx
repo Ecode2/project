@@ -7,107 +7,124 @@ import { ReaderControls } from "@/components/reader-controls";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { GetBookInfo } from "@/lib/api";
+import { useParams } from "next/navigation";
 
 
-export default function BookPage({ params }: { params: { id: string } }) {
-  const [showControls, setShowControls] = useState(true);
-  const [fontSize, setFontSize] = useState(16);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [total_page, setTotalPage] = useState(0);
-  const [title, setTitle] = useState<string>("")
+export default function BookPage() {
+
+	const params = useParams(); //{ params }: { params: { id: string } }
+
+	const [showControls, setShowControls] = useState(true);
+	const [fontSize, setFontSize] = useState(16);
+	const [currentPage, setCurrentPage] = useState(1);
+	const [total_page, setTotalPage] = useState(0);
+	const [title, setTitle] = useState<string>("")
 
 
-  useEffect(() => {
+	useEffect(() => {
 
-    const handleBookInfo = async () => {
-      const response = await GetBookInfo(parseInt(params.id));
+		const handleBookInfo = async () => {
+			let response = null
+			const stored_response = localStorage.getItem(params.id+"one_page")
+			if (stored_response) {
+				response = JSON.parse(stored_response)
+			} else {
+				response = await GetBookInfo(parseInt(params.id));
+				localStorage.setItem(params.id+"one_page", JSON.stringify(response))
+			}
 
-      if (response.status) {
-        if (typeof response.message !== "string") {
-          if (response.message.total_page !== null && total_page != 0) {
-            setTotalPage(response.message.total_page);
-          }
-          const currPage = localStorage.getItem(response.message.title)
-          if (currPage) {
-            setCurrentPage(parseInt(currPage))
-            if (title != "") {
-              setTitle(response.message.title)
-            }
-            
-          } else {
-            localStorage.setItem(response.message.title, currentPage.toString())
-            setTitle(response.message.title)
-          }
-        }
-      }
+			if (response.status) {
+				if (typeof response.message !== "string") {
 
-    }
-    handleBookInfo()
-  }, [currentPage, params.id, title, total_page]);
+					if (response.message.total_page !== null) {
+						setTotalPage(response.message.total_page);
+					}
 
+					const currPage = localStorage.getItem(response.message.title+params.id+"one_page")
 
-  // Hide controls after 3 seconds of inactivity
-  useEffect(() => {
-    let timeout: NodeJS.Timeout;
-    const handleActivity = () => {
-      setShowControls(true);
-      clearTimeout(timeout);
-      timeout = setTimeout(() => setShowControls(false), 3000);
-    };
+					if (currPage) {
 
-    window.addEventListener("mousemove", handleActivity);
-    window.addEventListener("touchstart", handleActivity);
-    
+						setCurrentPage(parseInt(currPage))
+						setTitle(response.message.title)
 
-    return () => {
-      window.removeEventListener("mousemove", handleActivity);
-      window.removeEventListener("touchstart", handleActivity);
-      clearTimeout(timeout);
-    };
-  }, [params.id]);
+					} else {
+						localStorage.setItem(response.message.title+params.id+"one_page", currentPage.toString())
+						setTitle(response.message.title)
+					}
+				}
+			}
+
+		}
+		handleBookInfo()
+	}, [currentPage, params.id]);
 
 
-  const handlePrevPage = () => {
-    console.log("running, back")
-    if (currentPage != 1) {
-      setCurrentPage(currentPage-1)
-    }
+	// Hide controls after 3 seconds of inactivity
+	useEffect(() => {
+		let timeout: NodeJS.Timeout;
+		const handleActivity = () => {
+			setShowControls(true);
+			clearTimeout(timeout);
+			timeout = setTimeout(() => setShowControls(false), 3000);
+		};
 
-  }
-  const handleNextPage = () => {
-    console.log("running, foreward")
-    if (currentPage != total_page) {
-      setCurrentPage(currentPage+1)
-    }
-  }
+		window.addEventListener("mousemove", handleActivity);
+		window.addEventListener("touchstart", handleActivity);
 
-  return (
-    <div className="min-h-screen bg-[#F8F9FA] dark:bg-[#1A1B1E] text-foreground">
-      <ReaderControls
-        show={showControls}
-        fontSize={fontSize}
-        onFontSizeChange={(value) => setFontSize(value[0])}
-        onPrevPage={handlePrevPage}
-        onNextPage={handleNextPage}
-        currentPage={currentPage}
-        totalPages={total_page}
-      />
 
-      <div className="container max-w-2xl mx-auto px-4 py-16">
-        <BookReader
-          fontSize={fontSize}
-          currentPage={currentPage}
-          onClick={() => setShowControls(!showControls)}
-          bookId={parseInt(params.id)}
-        />
-      </div>
+		return () => {
+			window.removeEventListener("mousemove", handleActivity);
+			window.removeEventListener("touchstart", handleActivity);
+			clearTimeout(timeout);
+		};
+	}, [params.id]);
 
-      <Link href="/library" className="fixed top-4 left-4">
-        <Button variant="ghost" size="sm" className="gap-2">
-          <ChevronLeft className="h-4 w-4" />
-          Back to Library
-        </Button>
-      </Link>
-    </div>
-  );
+
+	const handlePrevPage = () => {
+
+		if (currentPage != 1) {
+			localStorage.removeItem(title+params.id+"one_page")
+			localStorage.setItem(title+params.id+"one_page", (currentPage - 1).toString())
+			setCurrentPage(currentPage - 1)
+		}
+
+	}
+	const handleNextPage = () => {
+
+		if (currentPage != total_page) {
+			localStorage.removeItem(title+params.id+"one_page")
+			localStorage.setItem(title+params.id+"one_page", (currentPage + 1).toString())
+			setCurrentPage(currentPage + 1)
+		}
+	}
+
+	return (
+		<div className="min-h-screen bg-[#F8F9FA] dark:bg-[#1A1B1E] text-foreground">
+			<ReaderControls
+				show={showControls}
+				fontSize={fontSize}
+				onFontSizeChange={(value) => setFontSize(value[0])}
+				onPrevPage={handlePrevPage}
+				onNextPage={handleNextPage}
+				currentPage={currentPage}
+				totalPages={total_page}
+			/>
+
+			<div className="container max-w-2xl mx-auto px-4 py-16">
+				<BookReader
+					fontSize={fontSize}
+					currentPage={currentPage}
+					onClick={() => setShowControls(!showControls)}
+					bookId={parseInt(params.id)}
+				/>
+			</div>
+
+			<Link href="/library" className="fixed top-4 left-4">
+				<Button variant="ghost" size="sm" className="gap-2">
+					<ChevronLeft className="h-4 w-4" />
+					Back to Library
+				</Button>
+			</Link>
+		</div>
+	);
 }

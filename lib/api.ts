@@ -1,6 +1,7 @@
 import { AxiosError } from "axios";
-import { AllBookPage, BookCoverResponse, BookListResponse, LoginInfo, OneBookPage, RegisterInfo, UserInfo } from "@/lib/definitions"
+import { AllBookPage, ApiResponse, BookCoverResponse, BookListResponse, LoginInfo, OneBookPage, RegisterInfo, UserInfo } from "@/lib/definitions"
 import api from "@/lib/axiosInstance"
+import {FormSchemaData} from "@/lib/definitions"
 
 export async function checkToken() {
 	const token = localStorage.getItem("access_token");
@@ -185,18 +186,25 @@ export const register = async (userInfo: RegisterInfo) => {
 	}
 }
 
-export const ListPublicbooks = async () => {
+export const ListBooks = async (visibility: "public" | "private" | null) => {
 	const token = localStorage.getItem("access_token");
 
 	try {
+		let url = "/books/"
+		if (visibility == "public") {
+			url+="?status=public"
+		}else if (visibility == "private") {
+			url+="?status=private"
+		}
+
 		const response = token ?
-			await api.get(`/books/`,
+			await api.get(url,
 				{
 					headers: {
 						"Authorization": token
 					}
 				}) :
-			await api.get(`/books/`)
+			await api.get(url)
 
 		if (response.status != 200) { return { status: false, message: "Something went wrong" } }
 
@@ -219,7 +227,7 @@ export const GetBookInfo = async (id: number) => {
 
 	try {
 		const response = token ?
-			await api.get(`/books/`, {
+			await api.get(`/books/${id}/`, {
 				headers: {
 					"Authorization": token
 				}
@@ -240,6 +248,65 @@ export const GetBookInfo = async (id: number) => {
 		return { status: false, message: "Something went wrong" }
 	}
 }
+
+export async function UpdateBookInfo(id: number, updates: Partial<BookCoverResponse>): Promise<ApiResponse> {
+	const token = localStorage.getItem("access_token");
+	
+	if (!token) {
+	  return { status: false, message: "Authentication required" };
+	}
+  
+	try {
+	  const response = await api.patch(`/books/${id}/`, updates, {
+		headers: {
+		  "Authorization": token
+		}
+	  });
+  
+	  if (response.status !== 200) {
+		return { status: false, message: "Failed to update book" };
+	  }
+  
+	  const data: BookCoverResponse = response.data;
+	  return {
+		status: true,
+		message: data,
+	  };
+	} catch (error) {
+	  console.log("an error", error);
+	  return { status: false, message: "Failed to update book" };
+	}
+  }
+  
+  export async function DeleteBookInfo(id: number): Promise<ApiResponse> {
+	const token = localStorage.getItem("access_token");
+	
+	if (!token) {
+	  return { status: false, message: "Authentication required" };
+	}
+  
+	try {
+	  const response = await api.delete(`/books/${id}/`, {
+		headers: {
+		  "Authorization": token
+		}
+	  });
+  
+	  if (response.status !== 204) {
+		return { status: false, message: "Failed to delete book" };
+	  }
+  
+	  return {
+		status: true,
+		message: "Book deleted successfully",
+	  };
+	} catch (error) {
+	  console.log("an error", error);
+	  return { status: false, message: "Failed to delete book" };
+	}
+  }
+
+
 
 export const GetOnePage = async (id: number, page: number) => {
 	const token = localStorage.getItem("access_token");
@@ -295,3 +362,90 @@ export const GetAllPage = async (id: number, page: number) => {
 		return { status: false, message: "Something went wrong" }
 	}
 }
+
+
+export const CreateBook = async (formData: FormSchemaData) => {
+    const token = localStorage.getItem("access_token");
+    if (typeof token !== "string") {
+        return { status: false, message: "Something went wrong" };
+    }
+
+    const nativeFormData = new FormData();
+
+    // Populate native FormData with formSchema fields
+    Object.entries(formData).forEach(([key, value]) => {
+        if (key === "book") {
+            // Handle the file array
+            nativeFormData.append(key, value); // Assuming book is a file array
+        } else {
+            nativeFormData.append(key, value as string | Blob);
+        }
+    });
+
+    // Map isPublic to status
+    const status = formData.isPublic ? "public" : "private";
+    nativeFormData.append("status", status);
+    nativeFormData.delete("isPublic");
+
+    // Convert publication_year to production_year
+    if (formData.publication_year) {
+        nativeFormData.append("production_year", formData.publication_year);
+        nativeFormData.delete("publication_year");
+    }
+
+	
+    const file = nativeFormData.get("book");
+
+    try {
+        // Step 1: Create the book
+        const bookData = {
+            title: formData.title,
+            description: formData.description,
+            author: formData.author,
+            production_year: formData.publication_year,
+            status: status,
+        };
+
+        const bookResponse = await api.post(`/books/`, bookData, {
+            headers: {
+                "Authorization": `${token}`,
+                "Content-Type": "application/json",
+            },
+        });
+
+        if (bookResponse.status !== 201) {
+            return { status: false, message: "Failed to create book" };
+        }
+
+        const book = bookResponse.data;
+
+        // Step 2: Upload the file
+        const fileData = new FormData();
+        fileData.append("book", book.id); // Reference to book ID
+        fileData.append("file", file as Blob);
+
+        const fileResponse = await api.post(`/files/`, fileData, {
+            headers: {
+                "Authorization": `${token}`,
+            },
+        });
+
+        if (fileResponse.status !== 201) {
+            return { status: false, message: "Failed to upload file" };
+        }
+
+        return {
+            status: true,
+            message: {
+                book: book,
+                file: fileResponse.data,
+            },
+        };
+    } catch (error) {
+        console.error("An error occurred:", error);
+        return { status: false, message: "Something went wrong" };
+    }
+};
+
+/* Harry Potter and the Prisoner of Azkaban is the third novel in the Harry Potter franchise written by JK Rowling from 1997 to 2007 */
+

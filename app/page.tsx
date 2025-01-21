@@ -11,8 +11,6 @@ const Home = () => {
     logout()
   }
 
-  console.log(user, isAuthenticated)
-
   return (
     <div className="container px-4 py-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -30,9 +28,7 @@ const Home = () => {
       <SearchBar />
       
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-        {/* Placeholder for book cards */}
-        <BookList />
-        {/* Add more BookCard components */}
+        <BookList status="all" />
       </div>
     </div>
   );

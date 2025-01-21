@@ -3,9 +3,12 @@
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useUser } from "@/hooks/use-auth";
 import { BookOpen, Clock, BarChart } from "lucide-react";
 
 export default function ProfilePage() {
+  const user = useUser();
+
   return (
     <div className="container px-4 py-6 space-y-6">
       <div className="space-y-4">
@@ -16,8 +19,8 @@ export default function ProfilePage() {
               <BookOpen className="h-8 w-8 text-primary" />
             </div>
             <div>
-              <h2 className="text-xl font-semibold">John Doe</h2>
-              <p className="text-muted-foreground">john@example.com</p>
+              <h2 className="text-xl font-semibold">{user ? user.username : "John Doe"}</h2>
+              <p className="text-muted-foreground">{user ? user.email : "john@example.com"}</p>
             </div>
           </div>
         </Card>

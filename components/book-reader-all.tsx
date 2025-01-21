@@ -1,29 +1,38 @@
 "use client";
 
-import { GetOnePage } from "@/lib/api";
+import { GetAllPage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 
-interface BookReaderProps {
+interface BookReaderAllProps {
     fontSize: number;
     currentPage: number;
     onClick: () => void;
-    bookId: number
+    bookId: number;
+    title: string
 }
 
-export function BookReader({
+export function BookReaderAll({
     fontSize,
     currentPage,
     onClick,
     bookId,
-}: BookReaderProps) {
+    title,
+}: BookReaderAllProps) {
     const [contents, setContents] = useState<string>("")
     const [msg, setMsg] = useState<string>("Loading...")
 
     useEffect(() => {
 
         const handlePageContent = async () => {
-            const response = await GetOnePage(bookId, currentPage)
+            let response = null
+            const stored_response = localStorage.getItem(title+bookId+"pages")
+            if (stored_response) {
+                response = JSON.parse(stored_response)
+            }else {
+                response = await GetAllPage(bookId, currentPage)
+                localStorage.setItem(title+bookId+"pages", JSON.stringify(response))
+            }
 
             if (response.status) {
                 if (typeof response.message !== "string") {
@@ -42,7 +51,7 @@ export function BookReader({
         }
         handlePageContent()
 
-    }, [bookId, currentPage]);
+    }, [bookId, currentPage, title]);
 
 
     return (
@@ -54,8 +63,8 @@ export function BookReader({
                 "p-8 sm:p-12 rounded-lg shadow-lg",
                 "transition-all duration-200 ease-in-out"
             )}
-            style={{ fontSize: `${fontSize}px` }}
-        >
+            style={{ fontSize: `${fontSize}px` }}>
+            
             <p className="leading-relaxed">
                 {msg}
                 {contents}
