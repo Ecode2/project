@@ -14,7 +14,7 @@ export default function BookPage() {
 
     const params = useParams(); //{ params }: { params: { id: string } }
     const path = usePathname();
-	const router = useRouter();
+    const router = useRouter();
 
     const [showControls, setShowControls] = useState(true);
     const [fontSize, setFontSize] = useState(16);
@@ -22,17 +22,18 @@ export default function BookPage() {
     const [total_page, setTotalPage] = useState(0);
     const [title, setTitle] = useState<string>("")
 
+    const id = Array.isArray(params.id) ? params.id[0] : params.id;
 
     useEffect(() => {
 
         const handleBookInfo = async () => {
             let response = null
-            const stored_response = localStorage.getItem(params.id+"all_page")
+            const stored_response = localStorage.getItem(id+"all_page")
             if (stored_response) {
                 response = JSON.parse(stored_response)
             }else {
-                response = await GetBookInfo(parseInt(params.id));
-                localStorage.setItem(params.id+"all_page", JSON.stringify(response))
+                response = await GetBookInfo(parseInt(id));
+                localStorage.setItem(id+"all_page", JSON.stringify(response))
             }
 
             if (response.status) {
@@ -42,7 +43,7 @@ export default function BookPage() {
                         setTotalPage(response.message.total_page);
                     }
 
-                    const currPage = localStorage.getItem(response.message.title+params.id+"all_page")
+                    const currPage = localStorage.getItem(response.message.title+id+"all_page")
 
                     if (currPage) {
 
@@ -50,7 +51,7 @@ export default function BookPage() {
                         setTitle(response.message.title)
 
                     } else {
-                        localStorage.setItem(response.message.title+params.id+"all_page", currentPage.toString())
+                        localStorage.setItem(response.message.title+id+"all_page", currentPage.toString())
                         setTitle(response.message.title)
                     }
                 }
@@ -58,7 +59,7 @@ export default function BookPage() {
 
         }
         handleBookInfo()
-    }, [currentPage, params.id]);
+    }, [currentPage, id]);
 
 
     // Hide controls after 3 seconds of inactivity
@@ -79,14 +80,14 @@ export default function BookPage() {
             window.removeEventListener("touchstart", handleActivity);
             clearTimeout(timeout);
         };
-    }, [params.id]);
+    }, [id]);
 
 
     const handlePrevPage = () => {
 
         if (currentPage != 1) {
-            localStorage.removeItem(title+params.id+"all_page")
-            localStorage.setItem(title+params.id+"all_page", (currentPage - 1).toString())
+            localStorage.removeItem(title+id+"all_page")
+            localStorage.setItem(title+id+"all_page", (currentPage - 1).toString())
             setCurrentPage(currentPage - 1)
         }
 
@@ -94,16 +95,16 @@ export default function BookPage() {
     const handleNextPage = () => {
 
         if (currentPage != total_page) {
-            localStorage.removeItem(title+params.id+"all_page")
-            localStorage.setItem(title+params.id+"all_page", (currentPage + 1).toString())
+            localStorage.removeItem(title+id+"all_page")
+            localStorage.setItem(title+id+"all_page", (currentPage + 1).toString())
             setCurrentPage(currentPage + 1)
         }
     }
 
     const handlePageReload = () => {
-		localStorage.removeItem(params.id+"all_page")
-		localStorage.removeItem(title+params.id+"all_page")
-        localStorage.removeItem(title+params.id+"pages")
+		localStorage.removeItem(id+"all_page")
+		localStorage.removeItem(title+id+"all_page")
+        localStorage.removeItem(title+id+"pages")
 		console.log("page reloading")
 		return router.push(path);
 	}
@@ -126,7 +127,7 @@ export default function BookPage() {
                     fontSize={fontSize}
                     currentPage={currentPage}
                     onClick={() => setShowControls(!showControls)}
-                    bookId={parseInt(params.id)}
+                    bookId={parseInt(id)}
                     title={title}
                 />
             </div>
