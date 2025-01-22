@@ -7,12 +7,14 @@ import { ReaderControls } from "@/components/reader-controls";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { GetBookInfo } from "@/lib/api";
-import { useParams } from "next/navigation";
+import { useParams, useRouter, usePathname } from "next/navigation";
 
 
 export default function BookPage() {
 
     const params = useParams(); //{ params }: { params: { id: string } }
+    const path = usePathname();
+	const router = useRouter();
 
     const [showControls, setShowControls] = useState(true);
     const [fontSize, setFontSize] = useState(16);
@@ -98,6 +100,14 @@ export default function BookPage() {
         }
     }
 
+    const handlePageReload = () => {
+		localStorage.removeItem(params.id+"all_page")
+		localStorage.removeItem(title+params.id+"all_page")
+        localStorage.removeItem(title+params.id+"pages")
+		console.log("page reloading")
+		return router.push(path);
+	}
+
     return (
         <div className="min-h-screen bg-[#F8F9FA] dark:bg-[#1A1B1E] text-foreground">
             <ReaderControls
@@ -108,6 +118,7 @@ export default function BookPage() {
                 onNextPage={handleNextPage}
                 currentPage={currentPage}
                 totalPages={total_page}
+                reloadPage={handlePageReload}
             />
 
             <div className="container max-w-2xl mx-auto px-4 py-16">

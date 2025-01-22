@@ -36,13 +36,13 @@ export default function BookPage() {
   const router = useRouter();
   const { toast } = useToast();
 
-  const id = params.id;
+  const id = Array.isArray(params.id) ? params.id[0] : params.id;
   
 
   useEffect(() => {
 
     const fetchBook = async () => {
-      const data = await GetBookInfo(parseInt(id));
+      const data = await GetBookInfo(parseInt(id as string));
       if (data.status && typeof data.message !== "string") {
         setBook(data.message);
         console.log(data.message)
@@ -132,7 +132,7 @@ export default function BookPage() {
               <BookCard
                 title={book.title}
                 author={book.author || "Unknown"}
-                coverUrl={book.book_cover}
+                coverUrl={book.book_cover || null}
                 progress={progress}
               />
             </div>

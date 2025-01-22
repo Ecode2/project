@@ -161,6 +161,7 @@ export const register = async (userInfo: RegisterInfo) => {
 
 	try {
 		const response = await api.post(`/auth/register/`, {
+			username: userInfo.username,
 			email: userInfo.email,
 			password: userInfo.password,
 		},
@@ -232,7 +233,7 @@ export const GetBookInfo = async (id: number) => {
 					"Authorization": token
 				}
 			}) :
-	 		await api.get(`/books/`)
+	 		await api.get(`/books/${id}/`)
 
 		if (response.status != 200) { return { status: false, message: "Something went wrong" } }
 

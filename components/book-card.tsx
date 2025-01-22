@@ -5,7 +5,7 @@ import { Progress } from "@/components/ui/progress";
 interface BookCardProps {
   title: string;
   author: string;
-  coverUrl: string;
+  coverUrl: string | null;
   progress?: number;
 }
 
@@ -14,8 +14,8 @@ export function BookCard({ title, author, coverUrl, progress }: BookCardProps) {
     <Card className="overflow-hidden hover:shadow-lg transition-shadow">
       <div className="aspect-[2/3] relative">
         <Image
-          src={coverUrl}
-          alt={title}
+          src={coverUrl ? coverUrl : "/default-cover.jpg"}
+          alt={title ? title : "No title available"}
           fill
           className="object-cover"
           sizes="(max-width: 768px) 50vw, 33vw"

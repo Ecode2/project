@@ -63,7 +63,6 @@ export function AuthForm({ isSignIn }: AuthFormProps) {
       router.push("/");
     } catch (error) {
       console.error("Authentication failed:", error);
-      // Handle error, e.g., show a notification
     }
   };
 
