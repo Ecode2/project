@@ -32,7 +32,7 @@ export default function BookPage() {
             if (stored_response) {
                 response = JSON.parse(stored_response)
             }else {
-                response = await GetBookInfo(parseInt(id));
+                response = await GetBookInfo(parseInt(id as string));
                 localStorage.setItem(id+"all_page", JSON.stringify(response))
             }
 
@@ -127,7 +127,7 @@ export default function BookPage() {
                     fontSize={fontSize}
                     currentPage={currentPage}
                     onClick={() => setShowControls(!showControls)}
-                    bookId={parseInt(id)}
+                    bookId={parseInt(id as string)}
                     title={title}
                 />
             </div>
