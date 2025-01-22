@@ -28,12 +28,12 @@ export default function BookPage() {
 
 		const handleBookInfo = async () => {
 			let response = null
-			const stored_response = localStorage.getItem(params.id+"one_page")
+			const stored_response = localStorage.getItem(id+"one_page")
 			if (stored_response) {
 				response = JSON.parse(stored_response)
 			} else {
 				response = await GetBookInfo(parseInt(id as string));
-				localStorage.setItem(params.id+"one_page", JSON.stringify(response))
+				localStorage.setItem(id+"one_page", JSON.stringify(response))
 			}
 
 			if (response.status) {
@@ -43,7 +43,7 @@ export default function BookPage() {
 						setTotalPage(response.message.total_page);
 					}
 
-					const currPage = localStorage.getItem(response.message.title+params.id+"one_page")
+					const currPage = localStorage.getItem(response.message.title+id+"one_page")
 
 					if (currPage) {
 
@@ -51,7 +51,7 @@ export default function BookPage() {
 						setTitle(response.message.title)
 
 					} else {
-						localStorage.setItem(response.message.title+params.id+"one_page", currentPage.toString())
+						localStorage.setItem(response.message.title+id+"one_page", currentPage.toString())
 						setTitle(response.message.title)
 					}
 				}
@@ -59,7 +59,7 @@ export default function BookPage() {
 
 		}
 		handleBookInfo()
-	}, [currentPage, id, params.id]);
+	}, [currentPage, id]);
 
 
 	// Hide controls after 3 seconds of inactivity
@@ -80,14 +80,14 @@ export default function BookPage() {
 			window.removeEventListener("touchstart", handleActivity);
 			clearTimeout(timeout);
 		};
-	}, [params.id]);
+	}, [id]);
 
 
 	const handlePrevPage = () => {
 
 		if (currentPage != 1) {
-			localStorage.removeItem(title+params.id+"one_page")
-			localStorage.setItem(title+params.id+"one_page", (currentPage - 1).toString())
+			localStorage.removeItem(title+id+"one_page")
+			localStorage.setItem(title+id+"one_page", (currentPage - 1).toString())
 			setCurrentPage(currentPage - 1)
 		}
 
@@ -95,15 +95,15 @@ export default function BookPage() {
 	const handleNextPage = () => {
 
 		if (currentPage != total_page) {
-			localStorage.removeItem(title+params.id+"one_page")
-			localStorage.setItem(title+params.id+"one_page", (currentPage + 1).toString())
+			localStorage.removeItem(title+id+"one_page")
+			localStorage.setItem(title+id+"one_page", (currentPage + 1).toString())
 			setCurrentPage(currentPage + 1)
 		}
 	}
 
 	const handlePageReload = () => {
-		localStorage.removeItem(params.id+"one_page")
-		localStorage.removeItem(title+params.id+"one_page")
+		localStorage.removeItem(id+"one_page")
+		localStorage.removeItem(title+id+"one_page")
 		console.log("page reloading")
 		return router.push(path);
 	}
