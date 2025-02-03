@@ -11,6 +11,16 @@ import AuthProvider from '@/components/auth/AuthContext';
 export const metadata: Metadata = {
   title: 'BookVerse - Your Digital Reading Companion',
   description: 'A modern progressive web app for reading and managing your digital books',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'BookVerse'
+  },
+  icons: {
+    icon: '/icons/manifest-icon-192.maskable.png',
+    apple: '/icons/apple-icon-180.png'
+  }
 };
 
 export default function RootLayout({
