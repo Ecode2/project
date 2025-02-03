@@ -5,7 +5,8 @@ const nextConfig = {
   images: { unoptimized: true },
   eslint: {
     ignoreDuringBuilds: true
-  }
+  },
+  //reactStrictMode: false, // Disable strict mode
 };
 
 module.exports = nextConfig;
