@@ -31,7 +31,7 @@ export default function RootLayout({
   return (
     <AuthProvider>
       <html lang="en" suppressHydrationWarning>
-        <body> {/* className={inter.className}>*/}j
+        <body> {/* className={inter.className}>*/}
           <ThemeProvider
             attribute="class"
             defaultTheme="system"

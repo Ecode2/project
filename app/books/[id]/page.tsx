@@ -2,6 +2,15 @@
 
 import { useState, useEffect } from "react";
 import { BookCard } from "@/components/book-card";
+
+//import dynamic from "next/dynamic";
+
+// Dynamically import the ThreeDBookCard component with SSR disabled'
+//const ThreeDBookCard = dynamic(() => import("@/components/three-book-card").then(mod => mod.ThreeDBookCard), { ssr: false });
+//const ThreeDBookCard = dynamic(() => import("@/components/three-book-card"),{ ssr: false });
+
+//import { ThreeDBookCard } from "@/components/three-book-card";
+
 import { BookCoverResponse } from "@/lib/definitions";
 import { GetBookInfo, UpdateBookInfo, DeleteBookInfo } from "@/lib/api";
 import { useRouter, useParams, usePathname } from "next/navigation";
@@ -129,6 +138,13 @@ export default function BookPage() {
           {/* Book Card Section */}
           <div className="flex flex-col space-y-4">
             <div className="max-w-sm mx-auto w-full">
+              {/* <ThreeDBookCard
+                title={book.title}
+                author={book.author || "Unknown"}
+                coverUrl={book.book_cover || null}
+                description={book.description ?? undefined}
+                productionYear={book.production_year ? book.production_year.toString() : undefined}
+              /> */}
               <BookCard
                 title={book.title}
                 author={book.author || "Unknown"}
