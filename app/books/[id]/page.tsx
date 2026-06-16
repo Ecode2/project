@@ -164,6 +164,19 @@ export default function BookPage() {
                 Read all Pages
               </Button>
             </div>
+            {/* New audiobook-style reader entry points */}
+            <div className="flex flex-row gap-4 justify-between">
+              <Button className="flex-1" size="lg"
+                onClick={() => router.push(`/reader/${book.id}?mode=listen`)}>
+                <BookHeadphonesIcon className="mr-2 h-4 w-4" />
+                Listen
+              </Button>
+              <Button variant="secondary" className="flex-1" size="lg"
+                onClick={() => router.push(`/reader/${book.id}`)}>
+                <Clock className="mr-2 h-4 w-4" />
+                Reader
+              </Button>
+            </div>
           </div>
 
           {/* Book Details Section */}

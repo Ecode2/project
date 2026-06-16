@@ -1,6 +1,6 @@
 "use client";
 import { createContext, useState,  ReactNode, useEffect } from 'react';
-import { login as apiLogin, register as apiRegister, checkToken, userInfo } from '@/lib/api';
+import { login as apiLogin, register as apiRegister, logout as apiLogout, checkToken, userInfo } from '@/lib/api';
 import { UserInfo, LoginInfo, RegisterInfo } from '@/lib/definitions';
 import {AuthContextType} from "@/lib/definitions"
 
@@ -45,11 +45,10 @@ const AuthProvider = ({children}:{ children: ReactNode }) => {
   };
 
   const logout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('user');
-    setUser(null);
-    setIsAuthenticated(false);
+    apiLogout().finally(() => {
+      setUser(null);
+      setIsAuthenticated(false);
+    });
   };
 
   useEffect(() => {

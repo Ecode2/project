@@ -21,6 +21,18 @@ self.addEventListener('push', (event) => {
   });
 
   
+  // NEVER cache API or auth responses (tokens, private content). Bypass the SW
+  // entirely for cross-origin API calls and any /auth/ or /api/ path.
+  workbox.routing.registerRoute(
+    ({ url, request }) =>
+      url.pathname.startsWith('/auth/') ||
+      url.pathname.startsWith('/api/') ||
+      url.pathname.includes('/books/') ||
+      url.pathname.includes('/files/') ||
+      request.headers.get('Authorization'),
+    new workbox.strategies.NetworkOnly()
+  );
+
   // Cache all pages (Network First)
   workbox.routing.registerRoute(
     ({ request }) => request.mode === 'navigate',

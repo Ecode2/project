@@ -29,7 +29,12 @@ export interface BookCoverResponse {
     total_page: number | null,
     updated_at: string,
     created_at: string,
-    book_cover: string
+    // New in the audiobook reader: cover_url replaces the base64 book_cover.
+    cover_url?: string | null,
+    book_type?: "document" | "audiobook",
+    total_segments?: number | null,
+    duration_estimate_ms?: number | null,
+    book_cover?: string
 }
 
 export type BookListResponse = {
@@ -60,14 +65,24 @@ export interface AuthContextType {
   }
 
 
+// Accepted upload types: documents (pdf/epub/docx/txt) and audio (BookPlayer-style).
+const ACCEPTED_EXTENSIONS = [
+    "pdf", "epub", "docx", "txt",
+    "mp3", "m4a", "m4b", "aac", "ogg", "opus", "wav", "flac",
+];
+
 export const formSchema = z.object({
     title: z.string().min(1, "Title is required"),
     author: z.string().min(1, "Author is required"),
     description: z.string().optional(),
     book: z
         .any()
-        .refine((file) => file?.length === 1, "Book file is required")
-        .refine((file) => file?.[0]?.type === "application/pdf", "File must be a PDF"),
+        .refine((file) => file?.length >= 1, "At least one file is required")
+        .refine((file) => {
+            const name: string = file?.[0]?.name ?? "";
+            const ext = name.split(".").pop()?.toLowerCase() ?? "";
+            return ACCEPTED_EXTENSIONS.includes(ext);
+        }, "Unsupported file type"),
     publication_year: z.string().optional(),
     isPublic: z.boolean().optional(),
 });

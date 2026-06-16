@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SearchBar } from "@/components/search-bar";
 import { BookUploadDialog } from "@/components/book-upload-dialog";
 import { BookList } from "@/components/books/book-list";
+import { ContinueShelf } from "@/components/reader/continue-shelf";
 
 export default function LibraryPage() {
   const [filter, setFilter] = useState<"all" | "public" | "private">("all");
@@ -27,6 +28,8 @@ export default function LibraryPage() {
       </div>
 
       <SearchBar />
+
+      <ContinueShelf />
 
       <Tabs defaultValue={filter} className="space-y-4">
         <TabsList className="grid w-full grid-cols-3">
