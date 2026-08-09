@@ -35,6 +35,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { BookEditDialog } from "@/components/book-edit-dialog";
+import { useUser } from "@/hooks/use-auth";
 
 export default function BookPage() {
   const params = useParams();
@@ -42,8 +44,10 @@ export default function BookPage() {
 
   const [book, setBook] = useState<BookCoverResponse | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
+  const currentUser = useUser();
 
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   
@@ -112,6 +116,11 @@ export default function BookPage() {
       </div>
     );
   }
+
+  // `book.user` is serialized as the owner's username (StringRelatedField).
+  // Editing, deleting and changing visibility are owner-only on the backend,
+  // so don't offer them to someone viewing another user's public book.
+  const isOwner = Boolean(currentUser && book.user === currentUser.username);
 
   const handleOnePage = () => {
     router.push(`${path}/read`)
@@ -211,7 +220,7 @@ export default function BookPage() {
                     <Select
                       value={book.status}
                       onValueChange={handleStatusChange}
-                      disabled={isUpdating}
+                      disabled={isUpdating || !isOwner}
                     >
                       <SelectTrigger className="w-32">
                         <SelectValue />
@@ -247,8 +256,14 @@ export default function BookPage() {
                 <p>{new Date(book.updated_at).toLocaleDateString()}</p>
               </div>
 
+              {isOwner && (
               <div className="pt-4 flex gap-4">
-                <Button variant="outline" className="w-full" size="lg">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  size="lg"
+                  onClick={() => setIsEditing(true)}
+                >
                   <Edit className="mr-2 h-4 w-4" />
                   Edit Details
                 </Button>
@@ -279,10 +294,18 @@ export default function BookPage() {
                   </AlertDialogContent>
                 </AlertDialog>
               </div>
+              )}
             </div>
           </div>
         </div>
       </div>
+
+      <BookEditDialog
+        book={book}
+        open={isEditing}
+        onOpenChange={setIsEditing}
+        onUpdated={setBook}
+      />
     </div>
   );
 }

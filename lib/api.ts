@@ -1,6 +1,8 @@
 import {
-  AllBookPage, ApiResponse, BookCoverResponse, BookListResponse,
-  LoginInfo, OneBookPage, RegisterInfo, UserInfo, FormSchemaData,
+  AllBookPage, ApiResponse, BookCoverResponse, BookFileInfo, BookListResponse,
+  LibraryStats, LoginInfo, OneBookPage, RegisterInfo, UserInfo, FormSchemaData,
+  ACCEPTED_EXTENSIONS, AUDIO_MAX_BYTES, DOCUMENT_MAX_BYTES,
+  extensionOf, isAudioExtension,
 } from "@/lib/definitions";
 import api from "@/lib/axiosInstance";
 import {
@@ -136,6 +138,76 @@ export const GetAllPage = async (id: number, _page?: number) => {
     return { status: true, message: response.data as AllBookPage };
   } catch {
     return { status: false, message: "Something went wrong" };
+  }
+};
+
+export const GetLibraryStats = async () => {
+  if (!getAccessToken()) return { status: false, message: "Authentication required" };
+  try {
+    const response = await api.get(`/api/stats/`);
+    if (response.status !== 200) return { status: false, message: "Something went wrong" };
+    return { status: true, message: response.data as LibraryStats };
+  } catch {
+    return { status: false, message: "Something went wrong" };
+  }
+};
+
+/** Files attached to a book. The book detail response already embeds these,
+ *  but after an upload/delete we re-fetch just the file list. */
+export const ListBookFiles = async (bookId: number) => {
+  try {
+    const response = await api.get(`/files/?book=${bookId}`);
+    if (response.status !== 200) return { status: false, message: "Something went wrong" };
+    // The endpoint is paginated; callers only care about the rows.
+    const data = response.data;
+    const results: BookFileInfo[] = Array.isArray(data) ? data : data.results ?? [];
+    return { status: true, message: results };
+  } catch {
+    return { status: false, message: "Something went wrong" };
+  }
+};
+
+export const UploadBookFile = async (bookId: number, file: File, order = 0) => {
+  if (!getAccessToken()) return { status: false, message: "Authentication required" };
+  const ext = extensionOf(file.name);
+  if (!ACCEPTED_EXTENSIONS.includes(ext)) {
+    return { status: false, message: `Unsupported file type: .${ext}` };
+  }
+  const limit = isAudioExtension(ext) ? AUDIO_MAX_BYTES : DOCUMENT_MAX_BYTES;
+  if (file.size > limit) {
+    return {
+      status: false,
+      message: isAudioExtension(ext)
+        ? "Audio file shouldn't be larger than 500MB."
+        : "Document shouldn't be larger than 50MB.",
+    };
+  }
+  try {
+    const fileData = new FormData();
+    fileData.append("book", String(bookId));
+    fileData.append("file", file);
+    fileData.append("order", String(order));
+    const response = await api.post(`/files/`, fileData);
+    if (response.status !== 201) return { status: false, message: "Failed to upload file" };
+    return { status: true, message: response.data as BookFileInfo };
+  } catch (error: any) {
+    // Surface the backend's validation message (size/format) when present.
+    const detail = error?.response?.data;
+    const msg =
+      (typeof detail === "object" && detail && (detail.file?.[0] ?? detail.detail)) ||
+      "Failed to upload file";
+    return { status: false, message: String(msg) };
+  }
+};
+
+export const DeleteBookFile = async (fileId: number): Promise<ApiResponse> => {
+  if (!getAccessToken()) return { status: false, message: "Authentication required" };
+  try {
+    const response = await api.delete(`/files/${fileId}/`);
+    if (response.status !== 204) return { status: false, message: "Failed to delete file" };
+    return { status: true, message: "File deleted" };
+  } catch {
+    return { status: false, message: "Failed to delete file" };
   }
 };
 

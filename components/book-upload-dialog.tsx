@@ -1,9 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Dialog,
   DialogContent,
@@ -16,14 +13,19 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Upload } from "lucide-react";
-import { FormSchemaData, formSchema } from "@/lib/definitions";
+import { Loader2, Upload } from "lucide-react";
+import {
+  FormSchemaData,
+  formSchema,
+  FILE_ACCEPT_ATTR,
+} from "@/lib/definitions";
 import { CreateBook } from "@/lib/api";
 
 export function BookUploadDialog() {
   const [isPublic, setIsPublic] = useState(false);
-  const [error, setError] = useState("")
-  const router = useRouter();
+  const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState<FormSchemaData>({
     title: "",
@@ -32,11 +34,6 @@ export function BookUploadDialog() {
     book: null, // Changed to null to handle files
     publication_year: undefined,
     isPublic: isPublic,
-  });
-
-  const form = useForm<FormSchemaData>({
-    resolver: zodResolver(formSchema),
-    defaultValues: formData,
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -62,6 +59,23 @@ export function BookUploadDialog() {
 
   const handleBookUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setError("");
+
+    // Validate here rather than through react-hook-form: this form manages its
+    // own state and never calls handleSubmit, so the resolver never ran and no
+    // validation message was ever shown.
+    const parsed = formSchema.safeParse(formData);
+    if (!parsed.success) {
+      const errors: Record<string, string> = {};
+      for (const issue of parsed.error.issues) {
+        const key = String(issue.path[0] ?? "form");
+        if (!errors[key]) errors[key] = issue.message;
+      }
+      setFieldErrors(errors);
+      return;
+    }
+    setFieldErrors({});
+    setIsSubmitting(true);
 
     try {
       const data = {
@@ -74,19 +88,23 @@ export function BookUploadDialog() {
       };
 
       const response = await CreateBook(data);
-      
-      console.log(response, "eeff")
-      if (!response.status && typeof response.message === "string") {
-          return setError(response.message)
-        }
 
+      if (!response.status) {
+        setIsSubmitting(false);
+        return setError(
+          typeof response.message === "string"
+            ? response.message
+            : "Failed to upload book",
+        );
+      }
 
-      window.location.reload()
-
-
+      window.location.reload();
     } catch (error) {
       console.error("Failed to upload book:", error);
-      if (typeof error === "string") {setError(error)}
+      setIsSubmitting(false);
+      setError(
+        typeof error === "string" ? error : "Something went wrong. Please try again.",
+      );
     }
   };
 
@@ -103,9 +121,6 @@ export function BookUploadDialog() {
         className="sm:max-w-[425px] h-screen overflow-y-scroll"
       >
         <form onSubmit={handleBookUpload}>
-
-          
-
           <DialogHeader>
             <DialogTitle>Upload New Book</DialogTitle>
           </DialogHeader>
@@ -119,10 +134,8 @@ export function BookUploadDialog() {
                 value={formData.title}
                 onChange={handleInputChange}
               />
-              {form.formState.errors.title && (
-                <p className="text-red-600">
-                  {form.formState.errors.title.message}
-                </p>
+              {fieldErrors.title && (
+                <p className="text-red-600 text-sm">{fieldErrors.title}</p>
               )}
             </div>
             <div className="space-y-2">
@@ -134,49 +147,54 @@ export function BookUploadDialog() {
                 value={formData.author}
                 onChange={handleInputChange}
               />
-              {form.formState.errors.author && (
-                <p className="text-red-600">
-                  {form.formState.errors.author.message}
-                </p>
+              {fieldErrors.author && (
+                <p className="text-red-600 text-sm">{fieldErrors.author}</p>
               )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
               <Textarea
-                placeholder="Enter PDF description"
+                placeholder="Enter a short description"
                 name="description"
                 value={formData.description}
                 onChange={handleTextAreaChange}
               />
-              {form.formState.errors.description && (
-                <p className="text-red-600">
-                  {form.formState.errors.description.message}
-                </p>
+              {fieldErrors.description && (
+                <p className="text-red-600 text-sm">{fieldErrors.description}</p>
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="book">Book File (PDF)</Label>
+              <Label htmlFor="book">Book File</Label>
               <div className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:bg-secondary/50 transition-colors">
                 <Input
                   type="file"
                   id="book"
                   className="hidden"
                   name="book"
-                  accept=".pdf"
+                  accept={FILE_ACCEPT_ATTR}
                   onChange={handleInputChange}
                 />
-                <label htmlFor="book" className="block">
+                <label htmlFor="book" className="block cursor-pointer">
                   <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">
-                    Click to upload PDF file
-                  </p>
+                  {formData.book ? (
+                    <p className="text-sm font-medium break-all">
+                      {(formData.book as File).name}
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-sm text-muted-foreground">
+                        Click to upload a document or audiobook
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        PDF, EPUB, DOCX, TXT &middot; MP3, M4A, M4B, AAC, OGG, OPUS, WAV, FLAC
+                      </p>
+                    </>
+                  )}
                 </label>
-                {form.formState.errors.book && (
-                  <p className="text-red-600">
-                    {String(form.formState.errors.book.message)}
-                  </p>
-                )}
               </div>
+              {fieldErrors.book && (
+                <p className="text-red-600 text-sm">{fieldErrors.book}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="publication_year">Publication Year</Label>
@@ -188,10 +206,8 @@ export function BookUploadDialog() {
                 value={formData.publication_year || ""}
                 onChange={handleInputChange}
               />
-              {form.formState.errors.publication_year && (
-                <p className="text-red-600">
-                  {form.formState.errors.publication_year.message}
-                </p>
+              {fieldErrors.publication_year && (
+                <p className="text-red-600 text-sm">{fieldErrors.publication_year}</p>
               )}
             </div>
             <div className="flex items-center justify-between">
@@ -203,9 +219,16 @@ export function BookUploadDialog() {
               />
             </div>
           </div>
-          <p className="text-red-600"> {error} </p>
-          <Button type="submit" className="w-full">
-            Upload Book
+          {error && <p className="text-red-600 text-sm">{error}</p>}
+          <Button type="submit" className="w-full" disabled={isSubmitting}>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Uploading…
+              </>
+            ) : (
+              "Upload Book"
+            )}
           </Button>
         </form>
       </DialogContent>
