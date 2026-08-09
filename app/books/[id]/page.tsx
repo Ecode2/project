@@ -150,14 +150,14 @@ export default function BookPage() {
               {/* <ThreeDBookCard
                 title={book.title}
                 author={book.author || "Unknown"}
-                coverUrl={book.book_cover || null}
+                coverUrl={book.cover_url ?? book.book_cover ?? null}
                 description={book.description ?? undefined}
                 productionYear={book.production_year ? book.production_year.toString() : undefined}
               /> */}
               <BookCard
                 title={book.title}
                 author={book.author || "Unknown"}
-                coverUrl={book.book_cover || null}
+                coverUrl={book.cover_url ?? book.book_cover ?? null}
                 progress={progress}
               />
             </div>

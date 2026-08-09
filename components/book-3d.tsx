@@ -260,7 +260,7 @@ export default function BookPage() {
               <Book3D
                 title={book.title}
                 author={book.author || "Unknown"}
-                coverUrl={book.book_cover}
+                coverUrl={book.cover_url ?? book.book_cover ?? null}
                 progress={progress}
               />
             </div>

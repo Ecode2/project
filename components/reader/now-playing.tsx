@@ -53,6 +53,14 @@ export function NowPlaying({ book, settings }: { book: Book; settings: ReaderSet
   const durationMs = book.duration_estimate_ms || 0;
   const elapsedMs = (state.currentIndex / Math.max(1, total)) * durationMs;
 
+  // Playback is segment-addressed, but the skip buttons are labelled in
+  // seconds, so convert using the book's average segment duration. Without
+  // this the controls moved exactly one segment regardless of the configured
+  // skip_back_seconds / skip_forward_seconds.
+  const avgSegmentSec = durationMs > 0 ? durationMs / 1000 / Math.max(1, total) : 0;
+  const segmentsFor = (seconds: number) =>
+    avgSegmentSec > 0 ? Math.max(1, Math.round(seconds / avgSegmentSec)) : 1;
+
   // Sleep timer: counts down then pauses with a soft stop.
   useEffect(() => {
     if (sleepLeft == null) return;
@@ -75,8 +83,8 @@ export function NowPlaying({ book, settings }: { book: Book; settings: ReaderSet
     onPause: () => reader.pause(),
     onPreviousChapter: reader.prevChapter,
     onNextChapter: reader.nextChapter,
-    onSeekBackward: () => reader.skip(-1),
-    onSeekForward: () => reader.skip(1),
+    onSeekBackward: () => reader.skip(-segmentsFor(skipBack)),
+    onSeekForward: () => reader.skip(segmentsFor(skipFwd)),
   });
 
   const chapters = useMemo(() => state.toc as TocEntry[], [state.toc]);
@@ -144,7 +152,7 @@ export function NowPlaying({ book, settings }: { book: Book; settings: ReaderSet
         <Button variant="ghost" size="icon" onClick={reader.prevChapter} aria-label="Previous chapter">
           <ChevronFirst className="h-6 w-6" />
         </Button>
-        <Button variant="ghost" size="icon" onClick={() => reader.skip(-1)} aria-label={`Back ${skipBack}s`}>
+        <Button variant="ghost" size="icon" onClick={() => reader.skip(-segmentsFor(skipBack))} aria-label={`Back ${skipBack}s`}>
           <RotateCcw className="h-6 w-6" />
         </Button>
         <Button
@@ -155,7 +163,7 @@ export function NowPlaying({ book, settings }: { book: Book; settings: ReaderSet
         >
           {state.playing ? <Pause className="h-7 w-7" /> : <Play className="h-7 w-7" />}
         </Button>
-        <Button variant="ghost" size="icon" onClick={() => reader.skip(1)} aria-label={`Forward ${skipFwd}s`}>
+        <Button variant="ghost" size="icon" onClick={() => reader.skip(segmentsFor(skipFwd))} aria-label={`Forward ${skipFwd}s`}>
           <RotateCw className="h-6 w-6" />
         </Button>
         <Button variant="ghost" size="icon" onClick={reader.nextChapter} aria-label="Next chapter">

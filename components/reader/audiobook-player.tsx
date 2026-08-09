@@ -14,7 +14,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { useMediaSession } from "@/hooks/use-media-session";
-import { addBookmark, getToc, putProgress } from "@/lib/reader-api";
+import { addBookmark, getProgress, getToc, putProgress } from "@/lib/reader-api";
 import type { AudioChapter, Book, ReaderSettings } from "@/lib/reader-types";
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2, 3];
@@ -49,10 +49,25 @@ export function AudiobookPlayer({ book, settings }: { book: Book; settings: Read
     getToc(book.id).then((r) => setChapters(r.toc as AudioChapter[])).catch(() => {});
   }, [book.id]);
 
-  // Restore position once.
+  // Restore the saved position once, after the track's metadata is available
+  // (setting currentTime before that is silently discarded by the browser).
+  const restoredRef = useRef(false);
+  const [pendingSeekMs, setPendingSeekMs] = useState<number | null>(null);
+
   useEffect(() => {
-    putProgress; // no-op import guard
-  }, []);
+    let active = true;
+    getProgress(book.id)
+      .then((p) => {
+        if (!active || restoredRef.current) return;
+        const track = Math.min(Math.max(0, p.segment_index ?? 0), Math.max(0, tracks.length - 1));
+        if (track !== 0) setTrackIdx(track);
+        if (p.audio_ms) setPendingSeekMs(p.audio_ms);
+        restoredRef.current = true;
+      })
+      .catch(() => { restoredRef.current = true; });
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [book.id, tracks.length]);
 
   useEffect(() => {
     const a = audioRef.current;
@@ -127,7 +142,18 @@ export function AudiobookPlayer({ book, settings }: { book: Book; settings: Read
       <audio
         ref={audioRef}
         src={currentTrack?.url || undefined}
-        onLoadedMetadata={(e) => { setDuration(e.currentTarget.duration); e.currentTarget.playbackRate = speed; }}
+        onLoadedMetadata={(e) => {
+          setDuration(e.currentTarget.duration);
+          e.currentTarget.playbackRate = speed;
+          // Apply a restored position now that seeking is possible.
+          if (pendingSeekMs != null) {
+            const target = pendingSeekMs / 1000;
+            if (isFinite(e.currentTarget.duration) && target < e.currentTarget.duration) {
+              e.currentTarget.currentTime = target;
+            }
+            setPendingSeekMs(null);
+          }
+        }}
         onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
         onEnded={() => { saveProgress(); selectTrack(trackIdx + 1); }}
         onPause={() => setPlaying(false)}

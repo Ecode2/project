@@ -10,7 +10,10 @@ import { getBook, getReaderSettings } from "@/lib/reader-api";
 import type { Book, ReaderSettings } from "@/lib/reader-types";
 
 const DEFAULT_SETTINGS: ReaderSettings = {
-  voice_name: "en-US-Neural2-F",
+  // Empty means "let the server pick its configured TTS_DEFAULT_VOICE".
+  // Hardcoding a voice name here pins the client to one provider (the old
+  // value was a Google voice that the NVIDIA/Riva backend cannot synthesize).
+  voice_name: "",
   language_code: "en-US",
   speaking_rate: 1,
   pitch: 0,
