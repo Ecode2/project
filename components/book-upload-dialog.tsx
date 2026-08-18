@@ -21,7 +21,8 @@ import {
 } from "@/lib/definitions";
 import { CreateBook } from "@/lib/api";
 
-export function BookUploadDialog() {
+export function BookUploadDialog({ onUploaded }: { onUploaded?: () => void }) {
+  const [open, setOpen] = useState(false);
   const [isPublic, setIsPublic] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -98,7 +99,18 @@ export function BookUploadDialog() {
         );
       }
 
-      window.location.reload();
+      // Deliberately NOT window.location.reload(): the access token lives only
+      // in memory, so a full reload drops it and the session can only survive
+      // via the refresh cookie. Reloading here logged the user out on every
+      // upload. Close, reset, and let the caller refresh its list instead.
+      setIsSubmitting(false);
+      setFormData({
+        title: "", author: "", description: "", book: null,
+        publication_year: undefined, isPublic: false,
+      });
+      setIsPublic(false);
+      setOpen(false);
+      onUploaded?.();
     } catch (error) {
       console.error("Failed to upload book:", error);
       setIsSubmitting(false);
@@ -109,7 +121,7 @@ export function BookUploadDialog() {
   };
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button>
           <Upload className="h-4 w-4 mr-2" />

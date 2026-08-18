@@ -1,311 +1,225 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { BookCard } from "@/components/book-card";
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import {
+  BookOpen, ChevronLeft, Clock, Edit, Headphones, Play, Trash2,
+} from "lucide-react";
 
-//import dynamic from "next/dynamic";
-
-// Dynamically import the ThreeDBookCard component with SSR disabled'
-//const ThreeDBookCard = dynamic(() => import("@/components/three-book-card").then(mod => mod.ThreeDBookCard), { ssr: false });
-//const ThreeDBookCard = dynamic(() => import("@/components/three-book-card"),{ ssr: false });
-
-//import { ThreeDBookCard } from "@/components/three-book-card";
-
-import { BookCoverResponse } from "@/lib/definitions";
-import { GetBookInfo, UpdateBookInfo, DeleteBookInfo } from "@/lib/api";
-import { useRouter, useParams, usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Clock, Edit, Trash2, BookHeadphonesIcon } from "lucide-react";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
+  AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { BookEditDialog } from "@/components/book-edit-dialog";
 import { useUser } from "@/hooks/use-auth";
+import { usePlayer } from "@/components/player/player-provider";
+import { BookEditDialog } from "@/components/book-edit-dialog";
+import { DeleteBookInfo, GetBookInfo } from "@/lib/api";
+import { getProgress } from "@/lib/reader-api";
+import type { BookCoverResponse } from "@/lib/definitions";
+
+function duration(ms?: number | null) {
+  if (!ms) return null;
+  const m = Math.round(ms / 60000);
+  const h = Math.floor(m / 60);
+  return h ? `${h}h ${m % 60}m` : `${m}m`;
+}
 
 export default function BookPage() {
   const params = useParams();
-  const path = usePathname();
-
-  const [book, setBook] = useState<BookCoverResponse | null>(null);
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
   const currentUser = useUser();
+  const player = usePlayer();
 
-  const id = Array.isArray(params.id) ? params.id[0] : params.id;
-  
+  const id = Array.isArray(params.id) ? params.id[0] : (params.id as string);
+  const [book, setBook] = useState<BookCoverResponse | null>(null);
+  const [percent, setPercent] = useState(0);
+  const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
-
-    const fetchBook = async () => {
-      const data = await GetBookInfo(parseInt(id as string));
+    let active = true;
+    (async () => {
+      const data = await GetBookInfo(id);
+      if (!active) return;
       if (data.status && typeof data.message !== "string") {
         setBook(data.message);
-        console.log(data.message)
+        try {
+          const p = await getProgress(id);
+          if (active) setPercent(p.percent ?? 0);
+        } catch { /* not started */ }
       } else {
-        router.push("/404");
+        router.push("/library");
       }
-    };
-
-    fetchBook();
+    })();
+    return () => { active = false; };
   }, [id, router]);
-
-  const handleStatusChange = async (newStatus: string) => {
-    if (!book) return;
-    
-    setIsUpdating(true);
-    const result = await UpdateBookInfo(book.id, { status: newStatus });
-    setIsUpdating(false);
-
-    if (result.status && typeof result.message !== "string") {
-      setBook(result.message);
-      toast({
-        title: "Status Updated",
-        description: `Book status changed to ${newStatus}`,
-      });
-    } else {
-      toast({
-        variant: "destructive",
-        title: "Update Failed",
-        description: "Failed to update book status",
-      });
-    }
-  };
 
   const handleDelete = async () => {
     if (!book) return;
-
     const result = await DeleteBookInfo(book.id);
-    
     if (result.status) {
-      toast({
-        title: "Book Deleted",
-        description: "Book has been successfully deleted",
-      });
+      toast({ title: "Book deleted" });
       router.push("/library");
     } else {
-      toast({
-        variant: "destructive",
-        title: "Delete Failed",
-        description: "Failed to delete book",
-      });
+      toast({ variant: "destructive", title: "Delete failed" });
     }
+  };
+
+  const startPlaying = () => {
+    if (!book) return;
+    player.open(book.id, true);
+    router.push(`/reader/${book.id}`);
   };
 
   if (!book) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+      <div className="space-y-6 px-5 pt-10">
+        <Skeleton className="mx-auto aspect-[2/3] w-44 rounded-2xl" />
+        <Skeleton className="mx-auto h-6 w-2/3" />
+        <Skeleton className="mx-auto h-4 w-1/3" />
       </div>
     );
   }
 
-  // `book.user` is serialized as the owner's username (StringRelatedField).
-  // Editing, deleting and changing visibility are owner-only on the backend,
-  // so don't offer them to someone viewing another user's public book.
   const isOwner = Boolean(currentUser && book.user === currentUser.username);
-
-  const handleOnePage = () => {
-    router.push(`${path}/read`)
-  }
-  const handleAllPage = () => {
-    router.push(`${path}/read-all`)
-  }
-
-  // Calculate progress
-  let progress = 0;
-  const currentOnePage = parseInt(localStorage.getItem(book.title + book.id + "one_page") || "0");
-  const currentAllPage = parseInt(localStorage.getItem(book.title + book.id + "all_page") || "0");
-  
-  if (currentOnePage !== 0 && book.total_page) {
-    progress = (currentOnePage / book.total_page) * 100;
-  } else if (currentAllPage !== 0 && book.total_page) {
-    progress = (currentAllPage / book.total_page) * 100;
-  }
+  const totalTime = duration(book.duration_estimate_ms);
 
   return (
-    <div className="min-h-screen w-screen bg-background p-4 md:p-8">
-      <div className=" max-w-6xl mx-auto">
-        <div className="grid md:grid-cols-2 gap-8">
-          {/* Book Card Section */}
-          <div className="flex flex-col space-y-4">
-            <div className="max-w-sm mx-auto w-full">
-              {/* <ThreeDBookCard
-                title={book.title}
-                author={book.author || "Unknown"}
-                coverUrl={book.cover_url ?? book.book_cover ?? null}
-                description={book.description ?? undefined}
-                productionYear={book.production_year ? book.production_year.toString() : undefined}
-              /> */}
-              <BookCard
-                title={book.title}
-                author={book.author || "Unknown"}
-                coverUrl={book.cover_url ?? book.book_cover ?? null}
-                progress={progress}
-              />
-            </div>
-            <div className="flex flex-row md:flex-col gap-4 justify-between mt-4">
-              <Button className="flex-1" size="lg"
-                onClick={handleOnePage}>
-                <Clock className="mr-2 h-4 w-4" />
-                Read One Page
-              </Button>
-              <Button variant="outline" className="flex-1" size="lg"
-                onClick={handleAllPage}>
-                <BookHeadphonesIcon className="mr-2 h-4 w-4" />
-                Read all Pages
-              </Button>
-            </div>
-            {/* New audiobook-style reader entry points */}
-            <div className="flex flex-row gap-4 justify-between">
-              <Button className="flex-1" size="lg"
-                onClick={() => router.push(`/reader/${book.id}?mode=listen`)}>
-                <BookHeadphonesIcon className="mr-2 h-4 w-4" />
-                Listen
-              </Button>
-              <Button variant="secondary" className="flex-1" size="lg"
-                onClick={() => router.push(`/reader/${book.id}`)}>
-                <Clock className="mr-2 h-4 w-4" />
-                Reader
-              </Button>
-            </div>
+    <div className="pt-safe">
+      {/* Cover backdrop: blurred art bleeding behind the header, iOS style. */}
+      <div className="relative">
+        {book.cover_url && (
+          <div
+            aria-hidden
+            className="absolute inset-0 -z-10 bg-cover bg-center opacity-25 blur-2xl"
+            style={{ backgroundImage: `url(${book.cover_url})` }}
+          />
+        )}
+        <div className="flex items-center px-3 py-3">
+          <Button variant="ghost" size="icon" aria-label="Back"
+            onClick={() => router.back()}>
+            <ChevronLeft className="h-6 w-6" />
+          </Button>
+        </div>
+
+        <div className="flex flex-col items-center px-6 pb-6 text-center">
+          <div className="aspect-[2/3] w-40 overflow-hidden rounded-2xl bg-muted shadow-2xl shadow-black/50 ring-1 ring-border/50">
+            {book.cover_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={book.cover_url} alt={book.title} className="h-full w-full object-cover" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center p-3 text-sm text-muted-foreground">
+                {book.title}
+              </div>
+            )}
           </div>
 
-          {/* Book Details Section */}
-          <div className="space-y-6">
-            <div>
-              <h1 className="text-3xl font-bold mb-2">{book.title}</h1>
-              <p className="text-lg text-muted-foreground">
-                by {book.author || "Unknown"}
+          <h1 className="mt-5 text-xl font-semibold leading-tight">{book.title}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {book.author || "Unknown author"}
+          </p>
+
+          <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              {book.book_type === "audiobook"
+                ? <><Headphones className="h-3.5 w-3.5" /> Audiobook</>
+                : <><Clock className="h-3.5 w-3.5" /> {totalTime ?? "Narrated"}</>}
+            </span>
+            {book.production_year && <span>· {book.production_year}</span>}
+            {book.status === "public" && <span>· Public</span>}
+          </div>
+
+          <div className="mt-6 flex w-full max-w-xs gap-3">
+            <Button size="lg" onClick={startPlaying}
+              className="h-12 flex-1 rounded-full text-base shadow-lg shadow-primary/25">
+              <Play className="mr-2 h-5 w-5" />
+              {percent > 0 && percent < 100 ? "Resume" : "Listen"}
+            </Button>
+            {book.book_type !== "audiobook" && (
+              <Button size="lg" variant="secondary"
+                aria-label="Read"
+                onClick={() => {
+                  player.open(book.id);
+                  router.push(`/reader/${book.id}?mode=read`);
+                }}
+                className="h-12 rounded-full px-5">
+                <BookOpen className="h-5 w-5" />
+              </Button>
+            )}
+          </div>
+
+          {percent > 0 && (
+            <div className="mt-3 w-full max-w-xs">
+              <div className="h-1 overflow-hidden rounded-full bg-secondary">
+                <div className="h-full bg-primary" style={{ width: `${percent}%` }} />
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {Math.round(percent)}% complete
               </p>
             </div>
-
-            <div className="space-y-4">
-              <div>
-                <h2 className="text-lg font-semibold mb-2">Description</h2>
-                <p className="text-muted-foreground">
-                  {book.description || "No description available"}
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <h3 className="font-medium text-sm text-muted-foreground">
-                    Production Year
-                  </h3>
-                  <p>{book.production_year || "Unknown"}</p>
-                </div>
-                <div>
-                  <h3 className="font-medium text-sm text-muted-foreground">
-                    Status
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    <Select
-                      value={book.status}
-                      onValueChange={handleStatusChange}
-                      disabled={isUpdating || !isOwner}
-                    >
-                      <SelectTrigger className="w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="public">Public</SelectItem>
-                        <SelectItem value="private">Private</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {isUpdating && (
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <h3 className="font-medium text-sm text-muted-foreground">
-                    Total Pages
-                  </h3>
-                  <p>{book.total_page || "Unknown"}</p>
-                </div>
-                <div>
-                  <h3 className="font-medium text-sm text-muted-foreground">
-                    Uploaded By
-                  </h3>
-                  <p>{book.user}</p>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="font-medium text-sm text-muted-foreground mb-1">
-                  Last Updated
-                </h3>
-                <p>{new Date(book.updated_at).toLocaleDateString()}</p>
-              </div>
-
-              {isOwner && (
-              <div className="pt-4 flex gap-4">
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  size="lg"
-                  onClick={() => setIsEditing(true)}
-                >
-                  <Edit className="mr-2 h-4 w-4" />
-                  Edit Details
-                </Button>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="destructive" className="w-full" size="lg">
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete Book
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This action cannot be undone. This will permanently delete the
-                        book and remove it from your library.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={handleDelete}
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      >
-                        Delete
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </div>
-              )}
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
-      <BookEditDialog
-        book={book}
-        open={isEditing}
-        onOpenChange={setIsEditing}
-        onUpdated={setBook}
-      />
+      <div className="space-y-6 px-6">
+        {book.description && (
+          <section>
+            <h2 className="mb-1.5 text-sm font-semibold">About</h2>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              {book.description}
+            </p>
+          </section>
+        )}
+
+        <section className="grid grid-cols-2 gap-4 text-sm">
+          <div>
+            <p className="text-xs text-muted-foreground">Uploaded by</p>
+            <p>{book.user}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Updated</p>
+            <p>{new Date(book.updated_at).toLocaleDateString()}</p>
+          </div>
+        </section>
+
+        {isOwner && (
+          <div className="flex gap-3 pb-4">
+            <Button variant="secondary" className="flex-1 rounded-xl"
+              onClick={() => setIsEditing(true)}>
+              <Edit className="mr-2 h-4 w-4" /> Edit
+            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="ghost" className="flex-1 rounded-xl text-destructive hover:text-destructive">
+                  <Trash2 className="mr-2 h-4 w-4" /> Delete
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete this book?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This permanently removes the book, its files and your progress.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDelete}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        )}
+      </div>
+
+      <BookEditDialog book={book} open={isEditing} onOpenChange={setIsEditing}
+        onUpdated={setBook} />
     </div>
   );
 }

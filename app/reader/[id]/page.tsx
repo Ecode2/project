@@ -2,23 +2,23 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
+import { BookOpen } from "lucide-react";
 
-import { AudiobookPlayer } from "@/components/reader/audiobook-player";
-import { NowPlaying } from "@/components/reader/now-playing";
-import { ReaderView } from "@/components/reader/reader-view";
-import { getBook, getReaderSettings } from "@/lib/reader-api";
-import type { Book, ReaderSettings } from "@/lib/reader-types";
+import { FullPlayer } from "@/components/player/full-player";
+import { ReadingView } from "@/components/reader/reading-view";
+import { usePlayer } from "@/components/player/player-provider";
+import { getReaderSettings } from "@/lib/reader-api";
+import type { ReaderSettings } from "@/lib/reader-types";
 
 const DEFAULT_SETTINGS: ReaderSettings = {
-  // Empty means "let the server pick its configured TTS_DEFAULT_VOICE".
-  // Hardcoding a voice name here pins the client to one provider (the old
-  // value was a Google voice that the NVIDIA/Riva backend cannot synthesize).
+  // Empty voice means "use the server's configured TTS_DEFAULT_VOICE"; naming
+  // a voice here would pin the client to one provider's scheme.
   voice_name: "",
   language_code: "en-US",
   speaking_rate: 1,
   pitch: 0,
   speed: 1,
-  theme: "light",
+  theme: "dark",
   font_family: "Georgia",
   font_size: 18,
   auto_scroll: true,
@@ -26,44 +26,69 @@ const DEFAULT_SETTINGS: ReaderSettings = {
   skip_forward_seconds: 30,
 };
 
-export default function ReaderPage() {
-  return (
-    <Suspense fallback={<div className="p-8 text-center text-sm text-muted-foreground">Loading…</div>}>
-      <ReaderPageInner />
-    </Suspense>
-  );
-}
-
-function ReaderPageInner() {
+function ReaderInner() {
   const params = useParams();
+  const id = Array.isArray(params.id) ? params.id[0] : (params.id as string);
+  const player = usePlayer();
   const search = useSearchParams();
-  const bookId = Number(params.id);
-  const mode = search.get("mode"); // "listen" | "read" | null
-
-  const [book, setBook] = useState<Book | null>(null);
   const [settings, setSettings] = useState<ReaderSettings>(DEFAULT_SETTINGS);
-  const [error, setError] = useState<string | null>(null);
+  // `?mode=read` opens straight into the book, so "Read" on the detail screen
+  // lands on the page rather than the player.
+  const [mode, setMode] = useState<"listen" | "read">(
+    search.get("mode") === "read" ? "read" : "listen",
+  );
+
+  // Opening is idempotent: arriving here from the mini-player must not restart
+  // a session that is already playing.
+  useEffect(() => {
+    if (id) player.open(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   useEffect(() => {
     let active = true;
-    Promise.all([getBook(bookId), getReaderSettings().catch(() => DEFAULT_SETTINGS)])
-      .then(([b, s]) => {
-        if (!active) return;
-        setBook(b);
-        setSettings({ ...DEFAULT_SETTINGS, ...s });
-      })
-      .catch((e) => active && setError(String(e)));
+    getReaderSettings()
+      .then((s) => active && setSettings({ ...DEFAULT_SETTINGS, ...s }))
+      .catch(() => {});
     return () => { active = false; };
-  }, [bookId]);
+  }, []);
 
-  if (error) return <div className="p-8 text-center text-sm text-destructive">{error}</div>;
-  if (!book) return <div className="p-8 text-center text-sm text-muted-foreground">Loading…</div>;
+  // The reading view is a full-bleed paper surface that owns the viewport, so
+  // it renders alone rather than alongside the player chrome.
+  if (mode === "read") {
+    return (
+      <ReadingView settings={settings} onSwitchToListen={() => setMode("listen")} />
+    );
+  }
 
-  if (book.book_type === "audiobook") {
-    return <AudiobookPlayer book={book} settings={settings} />;
-  }
-  if (mode === "listen") {
-    return <NowPlaying book={book} settings={settings} />;
-  }
-  return <ReaderView book={book} settings={settings} />;
+  return (
+    <div className="relative">
+      <FullPlayer settings={settings} />
+
+      {/* Only narrated documents have a text side to switch to. */}
+      {player.kind === "tts" && (
+        <div className="fixed inset-x-0 bottom-6 z-30 flex justify-center">
+          <button
+            type="button"
+            onClick={() => setMode("read")}
+            className="flex items-center gap-2 rounded-full border border-border/60 bg-card/95 px-5 py-2 text-xs shadow-lg backdrop-blur-xl transition active:scale-95"
+          >
+            <BookOpen className="h-3.5 w-3.5" /> Read along
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function ReaderPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
+        Loading…
+      </div>
+    }>
+      <ReaderInner />
+    </Suspense>
+  );
 }

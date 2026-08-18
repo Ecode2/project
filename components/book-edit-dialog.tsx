@@ -81,7 +81,7 @@ export function BookEditDialog({
   const [files, setFiles] = useState<BookFileInfo[]>(book.files ?? []);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<BookFileInfo | null>(null);
   const [error, setError] = useState("");
 

@@ -55,7 +55,7 @@ export class ReaderAudioClient {
   private manualClose = false;
 
   constructor(
-    private bookId: number,
+    private bookId: string,
     private handlers: ReaderClientHandlers = {},
   ) {}
 

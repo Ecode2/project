@@ -1,4 +1,4 @@
-import { apiGet, apiSend, apiUpload } from "./client";
+import { apiFetch, apiGet, apiSend, apiUpload } from "./client";
 import type {
   Book,
   Bookmark,
@@ -19,29 +19,42 @@ interface Paginated<T> {
 export const listBooks = (status?: "public" | "private") =>
   apiGet<Paginated<Book>>(`/books/${status ? `?status=${status}` : ""}`);
 
-export const getBook = (id: number) => apiGet<Book>(`/books/${id}/`);
+export const getBook = (id: string) => apiGet<Book>(`/books/${id}/`);
 
-export const getToc = (id: number) => apiGet<TocResponse>(`/books/${id}/toc/`);
+export const getToc = (id: string) => apiGet<TocResponse>(`/books/${id}/toc/`);
 
-export const getSegments = (id: number, start = 0, count = 100) =>
+export const getSegments = (id: string, start = 0, count = 100) =>
   apiGet<{ start: number; count: number; total: number; segments: Segment[] }>(
     `/books/${id}/segments/?start=${start}&count=${count}`,
   );
 
-export const getProgress = (id: number) =>
+export const getProgress = (id: string) =>
   apiGet<ReadingProgress>(`/books/${id}/progress/`);
 
-export const putProgress = (id: number, body: Partial<ReadingProgress>) =>
+export const putProgress = (id: string, body: Partial<ReadingProgress>) =>
   apiSend<ReadingProgress>(`/books/${id}/progress/`, "PUT", body);
 
-export const listBookmarks = (id: number) =>
+export const listBookmarks = (id: string) =>
   apiGet<Bookmark[]>(`/books/${id}/bookmarks/`);
 
-export const addBookmark = (id: number, body: Partial<Bookmark>) =>
+export const addBookmark = (id: string, body: Partial<Bookmark>) =>
   apiSend<Bookmark>(`/books/${id}/bookmarks/`, "POST", body);
 
-export const deleteBookmark = (id: number, bookmarkId: number) =>
+export const deleteBookmark = (id: string, bookmarkId: string) =>
   apiSend<void>(`/books/${id}/bookmarks/${bookmarkId}/`, "DELETE");
+
+/**
+ * Report wall-clock milliseconds actually spent playing since the last call.
+ * `keepalive` lets the final flush survive a page being closed (unlike a plain
+ * fetch, and unlike sendBeacon it can still carry the Authorization header).
+ */
+export const reportListening = (id: string, ms: number, keepalive = false) =>
+  apiFetch<{ ms: number }>(`/books/${id}/listening/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ms: Math.round(ms) }),
+    keepalive,
+  });
 
 export const getReaderSettings = () =>
   apiGet<ReaderSettings>(`/api/reader-settings/`);

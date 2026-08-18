@@ -89,7 +89,7 @@ export const ListBooks = async (visibility: "public" | "private" | null) => {
   }
 };
 
-export const GetBookInfo = async (id: number) => {
+export const GetBookInfo = async (id: string) => {
   try {
     const response = await api.get(`/books/${id}/`);
     if (response.status !== 200) return { status: false, message: "Something went wrong" };
@@ -99,7 +99,7 @@ export const GetBookInfo = async (id: number) => {
   }
 };
 
-export async function UpdateBookInfo(id: number, updates: Partial<BookCoverResponse>): Promise<ApiResponse> {
+export async function UpdateBookInfo(id: string, updates: Partial<BookCoverResponse>): Promise<ApiResponse> {
   if (!getAccessToken()) return { status: false, message: "Authentication required" };
   try {
     const response = await api.patch(`/books/${id}/`, updates);
@@ -110,7 +110,7 @@ export async function UpdateBookInfo(id: number, updates: Partial<BookCoverRespo
   }
 }
 
-export async function DeleteBookInfo(id: number): Promise<ApiResponse> {
+export async function DeleteBookInfo(id: string): Promise<ApiResponse> {
   if (!getAccessToken()) return { status: false, message: "Authentication required" };
   try {
     const response = await api.delete(`/books/${id}/`);
@@ -121,7 +121,7 @@ export async function DeleteBookInfo(id: number): Promise<ApiResponse> {
   }
 }
 
-export const GetOnePage = async (id: number, page: number) => {
+export const GetOnePage = async (id: string, page: number) => {
   try {
     const response = await api.get(`/books/${id}/read-page/?page=${page}`);
     if (response.status !== 200) return { status: false, message: "Something went wrong" };
@@ -131,7 +131,7 @@ export const GetOnePage = async (id: number, page: number) => {
   }
 };
 
-export const GetAllPage = async (id: number, _page?: number) => {
+export const GetAllPage = async (id: string, _page?: number) => {
   try {
     const response = await api.get(`/books/${id}/pages/`);
     if (response.status !== 200) return { status: false, message: "Something went wrong" };
@@ -154,7 +154,7 @@ export const GetLibraryStats = async () => {
 
 /** Files attached to a book. The book detail response already embeds these,
  *  but after an upload/delete we re-fetch just the file list. */
-export const ListBookFiles = async (bookId: number) => {
+export const ListBookFiles = async (bookId: string) => {
   try {
     const response = await api.get(`/files/?book=${bookId}`);
     if (response.status !== 200) return { status: false, message: "Something went wrong" };
@@ -167,7 +167,7 @@ export const ListBookFiles = async (bookId: number) => {
   }
 };
 
-export const UploadBookFile = async (bookId: number, file: File, order = 0) => {
+export const UploadBookFile = async (bookId: string, file: File, order = 0) => {
   if (!getAccessToken()) return { status: false, message: "Authentication required" };
   const ext = extensionOf(file.name);
   if (!ACCEPTED_EXTENSIONS.includes(ext)) {
@@ -184,7 +184,7 @@ export const UploadBookFile = async (bookId: number, file: File, order = 0) => {
   }
   try {
     const fileData = new FormData();
-    fileData.append("book", String(bookId));
+    fileData.append("book", bookId);
     fileData.append("file", file);
     fileData.append("order", String(order));
     const response = await api.post(`/files/`, fileData);
@@ -200,7 +200,7 @@ export const UploadBookFile = async (bookId: number, file: File, order = 0) => {
   }
 };
 
-export const DeleteBookFile = async (fileId: number): Promise<ApiResponse> => {
+export const DeleteBookFile = async (fileId: string): Promise<ApiResponse> => {
   if (!getAccessToken()) return { status: false, message: "Authentication required" };
   try {
     const response = await api.delete(`/files/${fileId}/`);

@@ -20,8 +20,8 @@ export type UserInfo = {
 
 /** A single uploaded file belonging to a book (documents or audiobook tracks). */
 export interface BookFileInfo {
-    id: number,
-    book: number,
+    id: string,
+    book: string,
     file: string,
     url: string | null,
     fmt: string,
@@ -33,7 +33,7 @@ export interface BookFileInfo {
 }
 
 export interface BookCoverResponse {
-    id: number,
+    id: string,
     title: string,
     description: string | null,
     user: string,
@@ -54,9 +54,12 @@ export interface BookCoverResponse {
 }
 
 /**
- * Aggregate reading stats (GET /api/stats/). Wall-clock reading time is not
- * recorded by the backend, so `estimated_listening_ms` is narration duration
- * weighted by progress -- an estimate, not a measurement.
+ * Aggregate reading stats (GET /api/stats/).
+ *
+ * `listening_ms` and friends are *measured*: the player reports the wall-clock
+ * time it spent actually playing. `estimated_listening_ms` is the older
+ * derived figure (narration duration x progress), kept for books listened to
+ * before measurement existed.
  */
 export type LibraryStats = {
     books_in_library: number,
@@ -65,8 +68,13 @@ export type LibraryStats = {
     books_started: number,
     books_completed: number,
     books_in_progress: number,
-    estimated_listening_ms: number,
     bookmarks: number,
+    listening_ms: number,
+    listening_today_ms: number,
+    listening_daily_average_ms: number,
+    days_listened: number,
+    current_streak_days: number,
+    estimated_listening_ms: number,
 }
 
 export type BookListResponse = {

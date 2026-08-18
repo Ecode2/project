@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -8,8 +9,10 @@ import { useAuth } from "@/hooks/use-auth";
 import { GetLibraryStats } from "@/lib/api";
 import { LibraryStats } from "@/lib/definitions";
 import {
-  BookOpen, Bookmark, CheckCircle2, Clock, Headphones, Library, FileText,
+  BookOpen, Bookmark, CheckCircle2, Clock, Flame, Headphones, Library,
+  LogIn, LogOut,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 /** ms -> "3h 20m" / "45m" / "—" */
 function formatDuration(ms: number): string {
@@ -43,7 +46,8 @@ function StatCard({
 }
 
 export default function ProfilePage() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, logout } = useAuth();
+  const router = useRouter();
   const [stats, setStats] = useState<LibraryStats | null>(null);
   const [statsError, setStatsError] = useState<string | null>(null);
 
@@ -75,9 +79,9 @@ export default function ProfilePage() {
       : 0;
 
   return (
-    <div className="container px-4 py-6 space-y-6">
-      <div className="space-y-4">
-        <h1 className="text-2xl font-bold">Profile</h1>
+    <div className="space-y-6 px-5 pt-safe">
+      <div className="space-y-4 pt-5">
+        <h1 className="text-[1.75rem] font-bold tracking-tight">Profile</h1>
         <Card className="p-6">
           <div className="flex items-center space-x-4">
             <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
@@ -134,18 +138,35 @@ export default function ProfilePage() {
             <StatCard
               icon={Clock}
               label="Listening Time"
-              value={formatDuration(stats.estimated_listening_ms)}
-              hint="Estimated from narration length"
+              value={formatDuration(stats.listening_ms)}
+              hint={
+                stats.listening_ms === 0 && stats.estimated_listening_ms > 0
+                  ? `~${formatDuration(stats.estimated_listening_ms)} before tracking`
+                  : "Measured while playing"
+              }
+            />
+            <StatCard
+              icon={Flame}
+              label="Streak"
+              value={stats.current_streak_days === 0
+                ? "—"
+                : `${stats.current_streak_days}d`}
+              hint={stats.days_listened > 0
+                ? `${stats.days_listened} day${stats.days_listened === 1 ? "" : "s"} total`
+                : undefined}
+            />
+            <StatCard
+              icon={Headphones}
+              label="Today"
+              value={formatDuration(stats.listening_today_ms)}
+              hint={stats.listening_daily_average_ms > 0
+                ? `${formatDuration(stats.listening_daily_average_ms)} daily avg`
+                : undefined}
             />
             <StatCard
               icon={Bookmark}
               label="Bookmarks"
               value={stats.bookmarks}
-            />
-            <StatCard
-              icon={stats.audiobooks > stats.documents ? Headphones : FileText}
-              label="Started"
-              value={stats.books_started}
             />
           </div>
 
@@ -174,6 +195,19 @@ export default function ProfilePage() {
           </div>
         )
       )}
+
+      <div className="pb-4">
+        {isAuthenticated ? (
+          <Button variant="secondary" className="w-full rounded-xl"
+            onClick={() => { logout(); router.push("/"); }}>
+            <LogOut className="mr-2 h-4 w-4" /> Sign out
+          </Button>
+        ) : (
+          <Button className="w-full rounded-xl" onClick={() => router.push("/auth")}>
+            <LogIn className="mr-2 h-4 w-4" /> Sign in
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

@@ -3,7 +3,7 @@ export type SegmentKind = "heading" | "paragraph" | "list_item" | "quote" | "cap
 export type Theme = "light" | "sepia" | "dark" | "night";
 
 export interface BookFile {
-  id: number;
+  id: string;
   fmt: string;
   url: string | null;
   order: number;
@@ -13,7 +13,7 @@ export interface BookFile {
 }
 
 export interface Book {
-  id: number;
+  id: string;
   title: string;
   description: string | null;
   user: string;
@@ -44,7 +44,7 @@ export interface AudioChapter {
   title: string;
   start_ms: number;
   end_ms: number | null;
-  book_file: number | null;
+  book_file: string | null;
 }
 
 export interface Segment {
@@ -58,7 +58,7 @@ export interface Segment {
 }
 
 export interface TocResponse {
-  book_id: number;
+  book_id: string;
   book_type: BookType;
   fmt: string;
   total_segments: number;
@@ -67,7 +67,7 @@ export interface TocResponse {
 }
 
 export interface ReadingProgress {
-  book: number;
+  book: string;
   segment_index: number;
   char_offset: number;
   chapter_index: number;
@@ -78,8 +78,8 @@ export interface ReadingProgress {
 }
 
 export interface Bookmark {
-  id: number;
-  book: number;
+  id: string;
+  book: string;
   segment_index: number;
   audio_ms: number | null;
   label: string;
@@ -103,10 +103,16 @@ export interface ReaderSettings {
 }
 
 export interface Voice {
+  /** Full provider id, e.g. "Magpie-Multilingual.EN-US.Aria.Calm". */
   name: string;
   language_codes: string[];
   ssml_gender: string;
   natural_sample_rate_hertz?: number;
+  /** Parsed out of the id by the backend so the picker can group sensibly. */
+  speaker?: string;
+  /** "Default" when the voice has no emotion suffix. */
+  emotion?: string;
+  model?: string;
 }
 
 /** Server → client WS frames. */

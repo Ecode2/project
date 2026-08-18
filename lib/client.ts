@@ -13,9 +13,37 @@ export const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ||
   "";
 
-export const WS_BASE =
-  process.env.NEXT_PUBLIC_WS_BASE ||
-  API_BASE.replace(/^http/, "ws");
+/**
+ * WebSocket origin. Derived from API_BASE by default (http->ws, https->wss).
+ *
+ * An explicit NEXT_PUBLIC_WS_BASE whose scheme contradicts the API's is a
+ * configuration mistake that fails in a very confusing way -- the browser
+ * aborts the handshake with no status and no server-side log line -- so
+ * reconcile it rather than propagate it.
+ */
+function resolveWsBase(): string {
+  const derived = API_BASE.replace(/^http/, "ws");
+  const configured = process.env.NEXT_PUBLIC_WS_BASE;
+  if (!configured) return derived;
+
+  const apiIsSecure = API_BASE.startsWith("https://");
+  const wsIsSecure = configured.startsWith("wss://");
+  if (API_BASE && apiIsSecure !== wsIsSecure) {
+    const corrected = apiIsSecure
+      ? configured.replace(/^ws:\/\//, "wss://")
+      : configured.replace(/^wss:\/\//, "ws://");
+    if (typeof console !== "undefined") {
+      console.warn(
+        `[bookverse] NEXT_PUBLIC_WS_BASE (${configured}) does not match the ` +
+          `scheme of NEXT_PUBLIC_API_BASE (${API_BASE}); using ${corrected}.`,
+      );
+    }
+    return corrected;
+  }
+  return configured;
+}
+
+export const WS_BASE = resolveWsBase();
 
 let accessToken: string | null = null;
 let refreshPromise: Promise<boolean> | null = null;
