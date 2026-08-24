@@ -18,7 +18,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  AlignLeft, ChevronLeft, Headphones, Minus, Pause, Play, Plus, Type,
+  AlignLeft, ChevronLeft, Headphones, LogIn, Minus, Pause, Play, Plus, Type,
 } from "lucide-react";
 
 import {
@@ -409,13 +409,22 @@ export function ReadingView({
           <div className="flex items-center gap-1">
             <button
               type="button"
-              onClick={player.toggle}
-              aria-label={player.playing ? "Pause narration" : "Play narration"}
+              // Narration needs an account; send them to sign in rather than
+              // pressing a button that can only fail.
+              onClick={() =>
+                player.authRequired ? router.push("/auth") : player.toggle()}
+              aria-label={
+                player.authRequired
+                  ? "Sign in to listen"
+                  : player.playing ? "Pause narration" : "Play narration"
+              }
               className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground"
             >
-              {player.playing
-                ? <Pause className="h-4 w-4" />
-                : <Play className="h-4 w-4 translate-x-[1px]" />}
+              {player.authRequired
+                ? <LogIn className="h-4 w-4" />
+                : player.playing
+                  ? <Pause className="h-4 w-4" />
+                  : <Play className="h-4 w-4 translate-x-[1px]" />}
             </button>
             <button
               type="button"

@@ -18,8 +18,10 @@ import {
   createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
 } from "react";
 
-import { ReaderAudioClient } from "@/lib/audio-ws";
-import { getBook, getProgress, putProgress, reportListening } from "@/lib/reader-api";
+import { ReaderAudioClient, unlockAudio } from "@/lib/audio-ws";
+import {
+  getBook, getProgress, getToc, putProgress, reportListening,
+} from "@/lib/reader-api";
 import type {
   AudioChapter, Book, BookFile, TocEntry,
 } from "@/lib/reader-types";
@@ -33,6 +35,10 @@ export interface PlayerState {
   playing: boolean;
   loading: boolean;
   error: string | null;
+  /** Transient, non-fatal message (e.g. a paragraph was skipped). */
+  notice: string | null;
+  /** Narration needs an account; reading the text does not. */
+  authRequired: boolean;
 
   /** Narrated documents: position is a segment index. */
   segmentIndex: number;
@@ -53,7 +59,7 @@ export interface PlayerState {
 
 const INITIAL: PlayerState = {
   book: null, kind: null, connection: "closed", playing: false, loading: false,
-  error: null, segmentIndex: 0, totalSegments: 0, currentText: "", chapterIndex: 0,
+  error: null, notice: null, authRequired: false, segmentIndex: 0, totalSegments: 0, currentText: "", chapterIndex: 0,
   toc: [], voice: "", trackIndex: 0, tracks: [], positionSec: 0, durationSec: 0,
   speed: 1,
 };
@@ -119,8 +125,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const ms = Math.round(pendingMsRef.current);
     if (!bookId || ms < 1000) return;
     pendingMsRef.current = 0;
-    reportListening(bookId, ms, keepalive).catch(() => {
-      // Put it back so a dropped request is retried on the next flush.
+    reportListening(bookId, ms, keepalive).catch((err: { status?: number }) => {
+      // An anonymous reader has nowhere to record time, so retrying would
+      // accumulate forever and re-POST every 30s. Only re-queue on failures
+      // that could plausibly succeed later (network, 5xx).
+      if (err?.status === 401 || err?.status === 403) return;
       pendingMsRef.current += ms;
     });
   }, [harvest]);
@@ -143,6 +152,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const open = useCallback(
     async (bookOrId: Book | string, autoplay = false) => {
       const id = typeof bookOrId === "string" ? bookOrId : bookOrId.id;
+      // Claim the AudioContext while the tap that triggered this is still on
+      // the stack. Everything below awaits (book, progress, ws ticket), and by
+      // then iOS Safari no longer counts us as user-initiated.
+      if (autoplay) unlockAudio();
       if (openIdRef.current === id) {
         if (autoplay) playRef.current?.();
         return;
@@ -191,6 +204,20 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
       patch({ book, kind: "tts", tracks: [], loading: false, segmentIndex: resumeSegment });
 
+      // Chapters/length come over REST as well as from the WebSocket's `ready`
+      // frame. Reading a public book works without an account, but listening
+      // does not, so the reader must not depend on the socket for structure.
+      getToc(id)
+        .then((t) => {
+          if (openIdRef.current !== id) return;
+          setState((s) => ({
+            ...s,
+            toc: s.toc.length ? s.toc : t.toc,
+            totalSegments: s.totalSegments || t.total_segments || 0,
+          }));
+        })
+        .catch(() => {});
+
       const client = new ReaderAudioClient(id, {
         onStateChange: (connection) => patch({ connection }),
         onReady: (frame) =>
@@ -205,6 +232,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           patch({ currentText: meta.text, chapterIndex: meta.chapter_index }),
         onCurrentSegment: (segmentIndex) => patch({ segmentIndex }),
         onEnded: () => patch({ playing: false }),
+        // Non-fatal: the stream carries on with the next paragraph, so surface
+        // it as a transient notice rather than an error that stops playback.
+        onSegmentSkipped: (segmentIndex) =>
+          patch({ notice: `Skipped a passage that couldn't be narrated (${segmentIndex}).` }),
         onError: (_code, detail) => patch({ error: detail }),
       });
       clientRef.current = client;
@@ -216,7 +247,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           patch({ playing: true });
         }
       } catch (e) {
-        patch({ error: String(e), connection: "closed" });
+        // Listening requires an account (the ws-ticket endpoint is gated), so
+        // a 401/403 here is an expected state for a signed-out reader, not a
+        // failure to shout about. Reading continues to work.
+        const status = (e as { status?: number })?.status;
+        if (status === 401 || status === 403) {
+          patch({ authRequired: true, connection: "closed", playing: false });
+        } else {
+          patch({ error: String(e), connection: "closed" });
+        }
       }
     },
     // `state.speed` is read once at connect time; re-creating this callback on
@@ -281,6 +320,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [state]);
 
   const play = useCallback(() => {
+    // Synchronous, before anything async: see unlockAudio().
+    unlockAudio();
     if (state.kind === "audio") {
       audioRef.current?.play().catch(() => {});
       patch({ playing: true });
@@ -307,6 +348,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [state.playing, play, pause]);
 
   const seekSegment = useCallback((index: number) => {
+    unlockAudio();
     clientRef.current?.seek(index);
     patch({ segmentIndex: index, playing: true });
   }, [patch]);
@@ -318,6 +360,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   /** Seconds are the user-facing unit even for segment-addressed narration. */
   const skipSeconds = useCallback((delta: number) => {
+    unlockAudio();
     setState((s) => {
       if (s.kind === "audio") {
         const el = audioRef.current;
@@ -340,6 +383,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const nextChapter = useCallback(() => {
+    unlockAudio();
     if (state.kind === "audio") {
       setState((s) => ({ ...s, trackIndex: Math.min(s.trackIndex + 1, s.tracks.length - 1) }));
       return;
@@ -349,6 +393,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [state.kind, patch]);
 
   const prevChapter = useCallback(() => {
+    unlockAudio();
     if (state.kind === "audio") {
       setState((s) => ({ ...s, trackIndex: Math.max(0, s.trackIndex - 1) }));
       return;
@@ -358,6 +403,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [state.kind, patch]);
 
   const selectTrack = useCallback((index: number) => {
+    unlockAudio();
     setState((s) => ({
       ...s,
       trackIndex: Math.max(0, Math.min(index, s.tracks.length - 1)),

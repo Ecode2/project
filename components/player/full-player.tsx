@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Bookmark as BookmarkIcon, ChevronDown, ChevronFirst, ChevronLast, Gauge,
-  List, Mic2, Moon, Pause, Play, RotateCcw, RotateCw,
+  Headphones, List, LogIn, Mic2, Moon, Pause, Play, RotateCcw, RotateCw,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { useMediaSession } from "@/hooks/use-media-session";
 import { usePlayer } from "@/components/player/player-provider";
+import { useUser } from "@/hooks/use-auth";
 import { addBookmark, listVoices } from "@/lib/reader-api";
 import type { AudioChapter, ReaderSettings, TocEntry, Voice } from "@/lib/reader-types";
 
@@ -40,6 +41,9 @@ export function FullPlayer({ settings }: { settings: ReaderSettings }) {
   const player = usePlayer();
   const router = useRouter();
   const { toast } = useToast();
+  // Bookmarks are per-user; a signed-out reader of a public book has nowhere
+  // to save one, so don't offer an action that can only fail.
+  const currentUser = useUser();
 
   const [voices, setVoices] = useState<Voice[]>([]);
   const [loadingVoices, setLoadingVoices] = useState(false);
@@ -142,6 +146,32 @@ export function FullPlayer({ settings }: { settings: ReaderSettings }) {
   }
 
   const book = player.book;
+
+  if (player.authRequired) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-5 px-8 text-center pt-safe">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+          <Headphones className="h-8 w-8 text-primary" />
+        </div>
+        <div className="space-y-1.5">
+          <h2 className="text-lg font-semibold">Sign in to listen</h2>
+          <p className="text-sm text-muted-foreground">
+            Narration is available to signed-in readers. You can keep reading
+            {book.title ? ` “${book.title}”` : " this book"} without an account.
+          </p>
+        </div>
+        <div className="flex w-full max-w-xs flex-col gap-2">
+          <Button className="h-11 rounded-full" onClick={() => router.push("/auth")}>
+            <LogIn className="mr-2 h-4 w-4" /> Sign in
+          </Button>
+          <Button variant="ghost" className="h-11 rounded-full"
+            onClick={() => router.push(`/reader/${book.id}?mode=read`)}>
+            Read instead
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex min-h-screen flex-col bg-gradient-to-b from-secondary/40 via-background to-background pt-safe">
@@ -317,10 +347,12 @@ export function FullPlayer({ settings }: { settings: ReaderSettings }) {
             </SheetContent>
           </Sheet>
 
-          <Button variant="ghost" size="sm" onClick={bookmark}
-            className="flex h-auto flex-col gap-1 py-2 text-[11px]">
-            <BookmarkIcon className="h-5 w-5" /> Mark
-          </Button>
+          {currentUser && (
+            <Button variant="ghost" size="sm" onClick={bookmark}
+              className="flex h-auto flex-col gap-1 py-2 text-[11px]">
+              <BookmarkIcon className="h-5 w-5" /> Mark
+            </Button>
+          )}
 
           <Sheet>
             <SheetTrigger asChild>
@@ -358,6 +390,9 @@ export function FullPlayer({ settings }: { settings: ReaderSettings }) {
 
         {player.error && (
           <p className="text-center text-sm text-destructive">{player.error}</p>
+        )}
+        {!player.error && player.notice && (
+          <p className="text-center text-xs text-muted-foreground">{player.notice}</p>
         )}
       </div>
     </div>

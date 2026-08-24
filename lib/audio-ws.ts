@@ -13,6 +13,33 @@ import type { ClientAction, ServerFrame, SegmentKind } from "./reader-types";
 
 const LOOKAHEAD_SEC = 0.3;
 
+/**
+ * One AudioContext for the whole app.
+ *
+ * iOS Safari only lets an AudioContext start (or resume) while a user gesture
+ * is still on the stack. Creating it lazily inside play() meant it was reached
+ * several `await`s after the tap -- past the gesture -- so Safari kept it
+ * suspended and nothing was audible. Installed PWAs get relaxed autoplay rules,
+ * which is why the same build played there and not in the browser.
+ *
+ * `unlockAudio()` must therefore be called *synchronously* from the event
+ * handler, before any awaiting. It is cheap and idempotent.
+ */
+let sharedCtx: AudioContext | null = null;
+
+export function unlockAudio(): AudioContext | null {
+  if (typeof window === "undefined") return null;
+  const Ctx =
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Ctx) return null;
+  if (!sharedCtx) sharedCtx = new Ctx();
+  // resume() returns a promise, but it must be *called* inside the gesture;
+  // awaiting it is not required and would push us past the gesture.
+  if (sharedCtx.state === "suspended") void sharedCtx.resume();
+  return sharedCtx;
+}
+
 interface Scheduled {
   src: AudioBufferSourceNode;
   index: number;
@@ -36,6 +63,8 @@ export interface ReaderClientHandlers {
   onProgress?: (segmentIndex: number) => void;
   onEnded?: () => void;
   onError?: (code: string, detail: string) => void;
+  /** A paragraph was dropped but the stream continues. */
+  onSegmentSkipped?: (segmentIndex: number, reason: string) => void;
   onStateChange?: (state: "connecting" | "open" | "closed") => void;
 }
 
@@ -97,16 +126,17 @@ export class ReaderAudioClient {
   }
 
   private ensureContext(): AudioContext {
-    if (!this.ctx) {
-      const Ctx =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      this.ctx = new Ctx();
-      this.gain = this.ctx.createGain();
-      this.gain.connect(this.ctx.destination);
-      this.nextStartAt = this.ctx.currentTime;
+    // Reuses the shared context so a session started by unlockAudio() inside
+    // the user gesture is the same one we schedule audio on.
+    const ctx = unlockAudio();
+    if (!ctx) throw new Error("Web Audio is unavailable in this browser.");
+    if (this.ctx !== ctx || !this.gain) {
+      this.ctx = ctx;
+      this.gain = ctx.createGain();
+      this.gain.connect(ctx.destination);
+      this.nextStartAt = ctx.currentTime;
     }
-    return this.ctx;
+    return ctx;
   }
 
   // -- inbound frames ---------------------------------------------------
@@ -120,6 +150,9 @@ export class ReaderAudioClient {
         case "segment_meta":
           this.pendingMeta = frame;
           this.handlers.onSegment?.(frame);
+          break;
+        case "segment_skipped":
+          this.handlers.onSegmentSkipped?.(frame.segment_index, frame.reason);
           break;
         case "progress_saved":
           this.handlers.onProgress?.(frame.segment_index);
@@ -281,7 +314,11 @@ export class ReaderAudioClient {
     this.flush();
     this.send({ action: "stop" });
     this.ws?.close();
-    this.ctx?.close();
+    // Only detach this session's gain node. The AudioContext is shared and
+    // must survive: close() is irreversible, and re-creating one later would
+    // land outside a user gesture, leaving iOS permanently silent.
+    try { this.gain?.disconnect(); } catch { /* already detached */ }
+    this.gain = null;
     this.ctx = null;
   }
 }

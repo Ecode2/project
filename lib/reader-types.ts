@@ -120,6 +120,8 @@ export type ServerFrame =
   | { type: "ready"; book_type: BookType; total_segments?: number; toc: TocEntry[] | AudioChapter[]; voice?: string; tracks?: BookFile[]; resume: ReadingProgress }
   | { type: "segment_meta"; segment_index: number; chapter_index: number; page: number | null; text: string; kind: SegmentKind; duration_ms: number }
   | { type: "progress_saved"; segment_index: number }
+  /** Non-fatal: one paragraph could not be synthesized; playback continues. */
+  | { type: "segment_skipped"; segment_index: number; reason: string }
   | { type: "paused"; segment_index: number }
   | { type: "stopped"; segment_index: number }
   | { type: "ended"; segment_index: number }
