@@ -228,14 +228,32 @@ export const CreateBook = async (formData: FormSchemaData) => {
     const book = bookResponse.data;
 
     // Step 2: upload the file(s). Supports a single file or a FileList.
+    //
+    // The book row already exists at this point, so a failed upload used to
+    // leave an empty book behind -- it showed up in the library, opened to a
+    // blank reader, and crashed the WebSocket with "no readable file". Roll it
+    // back so a failed upload leaves no trace.
     const files: File[] = formData.book?.length ? Array.from(formData.book) : [formData.book];
-    for (let i = 0; i < files.length; i += 1) {
-      const fileData = new FormData();
-      fileData.append("book", book.id);
-      fileData.append("file", files[i] as Blob);
-      fileData.append("order", String(i));
-      const fileResponse = await api.post(`/files/`, fileData);
-      if (fileResponse.status !== 201) return { status: false, message: "Failed to upload file" };
+    try {
+      for (let i = 0; i < files.length; i += 1) {
+        const fileData = new FormData();
+        fileData.append("book", book.id);
+        fileData.append("file", files[i] as Blob);
+        fileData.append("order", String(i));
+        const fileResponse = await api.post(`/files/`, fileData);
+        if (fileResponse.status !== 201) throw new Error("Failed to upload file");
+      }
+    } catch (uploadError: any) {
+      await api.delete(`/books/${book.id}/`).catch(() => {});
+      // Surface the server's own message (size/format) when it sent one.
+      const detail = uploadError?.response?.data;
+      const msg =
+        (typeof detail === "object" && detail && (detail.file?.[0] ?? detail.detail)) ||
+        (uploadError?.response?.status === 413
+          ? "That file is too large for the server to accept."
+          : null) ||
+        "Failed to upload the book file. The book was not saved.";
+      return { status: false, message: String(msg) };
     }
     return { status: true, message: { book } };
   } catch (error) {
