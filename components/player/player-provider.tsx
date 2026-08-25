@@ -18,7 +18,7 @@ import {
   createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
 } from "react";
 
-import { ReaderAudioClient, unlockAudio } from "@/lib/audio-ws";
+import { ReaderAudioClient, releaseAudioSession, unlockAudio } from "@/lib/audio-ws";
 import {
   getBook, getProgress, getToc, putProgress, reportListening,
 } from "@/lib/reader-api";
@@ -425,6 +425,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     saveProgress();
     flushListening();
     teardown();
+    // Hand the iOS audio session back so the ringer behaves normally again.
+    releaseAudioSession();
     setState(INITIAL);
   }, [saveProgress, flushListening, teardown]);
 

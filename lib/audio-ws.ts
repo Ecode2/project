@@ -27,12 +27,122 @@ const LOOKAHEAD_SEC = 0.3;
  */
 let sharedCtx: AudioContext | null = null;
 
+/* -------------------------------------------------------------------------
+ * iOS audio session
+ *
+ * WebKit gives a bare AudioContext the *ambient* audio session category. An
+ * ambient session is silenced by the iPhone's Ring/Silent switch, does not
+ * play in the background, and yields to other apps. Media elements that are
+ * actually playing media get the *playback* category instead, which ignores
+ * the Ring/Silent switch -- that is how Apple Books and Spotify keep playing
+ * with the switch flipped.
+ *
+ * Our TTS never touches an <audio> element: segments are decoded and
+ * scheduled through Web Audio, so iOS keeps us on ambient and the hardware
+ * switch mutes the speaker. Headphones bypass the switch entirely, which is
+ * why the exact same build is audible on EarPods and silent on the speaker.
+ * Android and desktop have no equivalent switch, so they were never affected.
+ *
+ * `navigator.audioSession` (Safari 16.4+) is the supported way to ask for the
+ * playback category. Older iOS gets the silent-loop fallback below.
+ * ---------------------------------------------------------------------- */
+type AudioSessionType =
+  | "auto" | "playback" | "transient" | "transient-solo" | "ambient" | "play-and-record";
+
+type NavigatorWithAudioSession = Navigator & {
+  audioSession?: { type: AudioSessionType };
+};
+
+function isIOS(): boolean {
+  if (typeof navigator === "undefined") return false;
+  // iPadOS 13+ reports itself as a Mac; the touch check separates it.
+  return (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.userAgent.includes("Mac") && navigator.maxTouchPoints > 1)
+  );
+}
+
+/** A half second of 8-bit silence, built in memory so no asset is needed. */
+function silentWavUrl(): string {
+  const rate = 8000;
+  const frames = rate / 2;
+  const bytes = new Uint8Array(44 + frames);
+  const view = new DataView(bytes.buffer);
+  const ascii = (off: number, text: string) => {
+    for (let i = 0; i < text.length; i += 1) view.setUint8(off + i, text.charCodeAt(i));
+  };
+  ascii(0, "RIFF");
+  view.setUint32(4, 36 + frames, true);
+  ascii(8, "WAVE");
+  ascii(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // mono
+  view.setUint32(24, rate, true);
+  view.setUint32(28, rate, true); // byte rate
+  view.setUint16(32, 1, true); // block align
+  view.setUint16(34, 8, true); // bits per sample
+  ascii(36, "data");
+  view.setUint32(40, frames, true);
+  bytes.fill(128, 44); // 0x80 is silence for unsigned 8-bit PCM
+  return URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
+}
+
+let keepAlive: HTMLAudioElement | null = null;
+
+/**
+ * Ask iOS for the playback audio session, so the Ring/Silent switch stops
+ * muting us and audio comes out of the speaker as well as headphones.
+ * Idempotent and safe to call on every gesture.
+ */
+function claimPlaybackSession(): void {
+  const session = (navigator as NavigatorWithAudioSession).audioSession;
+  if (session) {
+    try {
+      session.type = "playback";
+      return;
+    } catch {
+      /* fall through to the legacy path */
+    }
+  }
+  if (!isIOS() || keepAlive) return;
+  // iOS < 16.4 has no audioSession API. Playing a silent looping media
+  // element promotes the page's session to playback for as long as it runs.
+  // Best-effort: it must start inside the same user gesture.
+  const el = new Audio(silentWavUrl());
+  el.loop = true;
+  el.volume = 0;
+  // Keeps iOS from treating this as a video and taking over the screen.
+  el.setAttribute("playsinline", "");
+  keepAlive = el;
+  void el.play().catch(() => {
+    keepAlive = null;
+  });
+}
+
+/** Drop the playback session when the player is closed, so other apps and
+ *  the ringer get their normal behaviour back. */
+export function releaseAudioSession(): void {
+  const session = (navigator as NavigatorWithAudioSession).audioSession;
+  if (session) {
+    try { session.type = "auto"; } catch { /* not settable */ }
+  }
+  if (keepAlive) {
+    try { keepAlive.pause(); } catch { /* already stopped */ }
+    URL.revokeObjectURL(keepAlive.src);
+    keepAlive = null;
+  }
+}
+
 export function unlockAudio(): AudioContext | null {
   if (typeof window === "undefined") return null;
   const Ctx =
     window.AudioContext ||
     (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!Ctx) return null;
+  // Claim the session before the context exists: WebKit picks a category when
+  // the context is first started, so asking afterwards can come too late.
+  claimPlaybackSession();
   if (!sharedCtx) sharedCtx = new Ctx();
   // resume() returns a promise, but it must be *called* inside the gesture;
   // awaiting it is not required and would push us past the gesture.
