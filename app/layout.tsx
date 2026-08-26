@@ -6,6 +6,7 @@ import { Toaster } from '@/components/ui/toaster';
 import AuthProvider from '@/components/auth/AuthContext';
 import { PlayerProvider } from '@/components/player/player-provider';
 import { MiniPlayer } from '@/components/player/mini-player';
+import { Analytics } from '@vercel/analytics/next';
 
 export const metadata: Metadata = {
   title: 'BookVerse',
@@ -43,6 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <BottomNav />
               <Toaster />
             </PlayerProvider>
+            <Analytics />
           </ThemeProvider>
         </body>
       </html>
