@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { BookOpen } from "lucide-react";
 
 import { FullPlayer } from "@/components/player/full-player";
+import { PageView, pageFileFor } from "@/components/reader/page-view";
 import { ReadingView } from "@/components/reader/reading-view";
 import { usePlayer } from "@/components/player/player-provider";
 import { getReaderSettings } from "@/lib/reader-api";
@@ -34,9 +35,15 @@ function ReaderInner() {
   const [settings, setSettings] = useState<ReaderSettings>(DEFAULT_SETTINGS);
   // `?mode=read` opens straight into the book, so "Read" on the detail screen
   // lands on the page rather than the player.
-  const [mode, setMode] = useState<"listen" | "read">(
-    search.get("mode") === "read" ? "read" : "listen",
+  // "page" = the real EPUB/PDF pages; "text" = the segmented read-along view.
+  const requested = search.get("mode");
+  const [mode, setMode] = useState<"listen" | "page" | "text">(
+    requested === "read" || requested === "page" ? "page"
+      : requested === "text" ? "text" : "listen",
   );
+  // Only EPUB/PDF can be shown as pages; DOCX/TXT fall back to the text view.
+  const canPage = Boolean(pageFileFor(player.book?.files));
+  const view = mode === "page" && player.book && !canPage ? "text" : mode;
 
   // Opening is idempotent: arriving here from the mini-player must not restart
   // a session that is already playing.
@@ -55,9 +62,22 @@ function ReaderInner() {
 
   // The reading view is a full-bleed paper surface that owns the viewport, so
   // it renders alone rather than alongside the player chrome.
-  if (mode === "read") {
+  if (view === "page") {
     return (
-      <ReadingView settings={settings} onSwitchToListen={() => setMode("listen")} />
+      <PageView
+        settings={settings}
+        onSwitchToText={() => setMode("text")}
+        onSwitchToListen={() => setMode("listen")}
+      />
+    );
+  }
+  if (view === "text") {
+    return (
+      <ReadingView
+        settings={settings}
+        onSwitchToListen={() => setMode("listen")}
+        onSwitchToPages={canPage ? () => setMode("page") : undefined}
+      />
     );
   }
 
@@ -70,10 +90,10 @@ function ReaderInner() {
         <div className="fixed inset-x-0 bottom-6 z-30 flex justify-center">
           <button
             type="button"
-            onClick={() => setMode("read")}
+            onClick={() => setMode(canPage ? "page" : "text")}
             className="flex items-center gap-2 rounded-full border border-border/60 bg-card/95 px-5 py-2 text-xs shadow-lg backdrop-blur-xl transition active:scale-95"
           >
-            <BookOpen className="h-3.5 w-3.5" /> Read along
+            <BookOpen className="h-3.5 w-3.5" /> {canPage ? "Read" : "Read along"}
           </button>
         </div>
       )}

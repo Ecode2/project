@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import * as z from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -15,60 +16,61 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useAuth } from "@/hooks/use-auth";
-import { useRouter } from "next/navigation";
-
-const formSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-  username: z.string().min(3).optional(),
-});
+import { useRouter, useSearchParams } from "next/navigation";
 
 interface AuthFormProps {
   isSignIn: boolean;
 }
 
+/** Only same-site paths: `?next=//evil.com` must not become an open redirect. */
+export function safeNext(raw: string | null): string {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/auth")) return "/";
+  return raw;
+}
+
 export function AuthForm({ isSignIn }: AuthFormProps) {
   const router = useRouter();
+  const search = useSearchParams();
   const { login, register } = useAuth();
+  const [serverError, setServerError] = useState<string | null>(null);
 
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-    username: "",
+  // Sign-in only needs *a* password (the server decides if it's right);
+  // sign-up enforces a username and a minimum length up front.
+  const schema = useMemo(
+    () =>
+      z.object({
+        email: z.string().trim().email("Enter a valid email address."),
+        password: isSignIn
+          ? z.string().min(1, "Enter your password.")
+          : z.string().min(8, "Use at least 8 characters."),
+        username: isSignIn
+          ? z.string().optional()
+          : z.string().trim().min(3, "Pick a username of at least 3 characters."),
+      }),
+    [isSignIn],
+  );
+  type Values = z.infer<typeof schema>;
+
+  const form = useForm<Values>({
+    resolver: zodResolver(schema),
+    defaultValues: { email: "", password: "", username: "" },
   });
+  const submitting = form.formState.isSubmitting;
 
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues: formData,
-  });
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
-  };
-
-  const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const values = formData;
+  const onSubmit = async (values: Values) => {
+    setServerError(null);
     try {
-      if (isSignIn) {
-        if (login) {
-          await login(values.email, values.password);
-        }
-      } else {
-        if (register) {
-          await register(values.username || "", values.email, values.password);
-        }
-      }
-      router.push("/");
+      if (isSignIn) await login?.(values.email.trim(), values.password);
+      else await register?.(values.username ?? "", values.email.trim(), values.password);
+      router.replace(safeNext(search.get("next")));
     } catch (error) {
-      console.error("Authentication failed:", error);
+      setServerError(error instanceof Error ? error.message : "Something went wrong. Please try again.");
     }
   };
 
   return (
     <Form {...form}>
-      <form onSubmit={handleFormSubmit} className="space-y-4">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" noValidate>
         {!isSignIn && (
           <FormField
             control={form.control}
@@ -77,12 +79,7 @@ export function AuthForm({ isSignIn }: AuthFormProps) {
               <FormItem>
                 <FormLabel>Username</FormLabel>
                 <FormControl>
-                  <Input
-                    placeholder="johndoe"
-                    {...field}
-                    value={formData.username}
-                    onChange={handleInputChange}
-                  />
+                  <Input placeholder="johndoe" autoComplete="username" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -99,9 +96,8 @@ export function AuthForm({ isSignIn }: AuthFormProps) {
                 <Input
                   placeholder="example@email.com"
                   type="email"
+                  autoComplete={isSignIn ? "username" : "email"}
                   {...field}
-                  value={formData.email}
-                  onChange={handleInputChange}
                 />
               </FormControl>
               <FormMessage />
@@ -118,16 +114,23 @@ export function AuthForm({ isSignIn }: AuthFormProps) {
                 <Input
                   placeholder="••••••••"
                   type="password"
+                  autoComplete={isSignIn ? "current-password" : "new-password"}
                   {...field}
-                  value={formData.password}
-                  onChange={handleInputChange}
                 />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-        <Button type="submit" className="w-full">
+
+        {serverError && (
+          <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {serverError}
+          </p>
+        )}
+
+        <Button type="submit" className="w-full" disabled={submitting}>
+          {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           {isSignIn ? "Sign In" : "Create Account"}
         </Button>
       </form>

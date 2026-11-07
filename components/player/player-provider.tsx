@@ -71,6 +71,11 @@ interface PlayerApi extends PlayerState {
   play: () => void;
   pause: () => void;
   seekSegment: (index: number) => void;
+  /**
+   * Move the playhead to where the reader is looking WITHOUT starting
+   * narration, so pressing Play continues from the visible text.
+   */
+  setReadingPosition: (index: number) => void;
   seekSeconds: (sec: number) => void;
   skipSeconds: (delta: number) => void;
   nextChapter: () => void;
@@ -353,6 +358,19 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     patch({ segmentIndex: index, playing: true });
   }, [patch]);
 
+  const setReadingPosition = useCallback((index: number) => {
+    setState((s) => {
+      if (s.kind !== "tts" || s.playing || s.segmentIndex === index) return s;
+      const toc = s.toc as TocEntry[];
+      let chapterIndex = s.chapterIndex;
+      for (let i = 0; i < toc.length; i++) {
+        if ((toc[i].start_segment ?? 0) <= index) chapterIndex = toc[i].index ?? i;
+        else break;
+      }
+      return { ...s, segmentIndex: index, chapterIndex };
+    });
+  }, []);
+
   const seekSeconds = useCallback((sec: number) => {
     if (audioRef.current) audioRef.current.currentTime = sec;
     patch({ positionSec: sec });
@@ -476,7 +494,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [state.kind, state.positionSec, state.durationSec, state.segmentIndex, state.totalSegments]);
 
   const value: PlayerApi = {
-    ...state, open, toggle, play, pause, seekSegment, seekSeconds, skipSeconds,
+    ...state, open, toggle, play, pause, seekSegment, setReadingPosition, seekSeconds, skipSeconds,
     nextChapter, prevChapter, selectTrack, setSpeed, setVoice, close, progress,
   };
 

@@ -34,6 +34,18 @@ export const getProgress = (id: string) =>
 export const putProgress = (id: string, body: Partial<ReadingProgress>) =>
   apiSend<ReadingProgress>(`/books/${id}/progress/`, "PUT", body);
 
+/**
+ * Same as putProgress but survives the page being closed (`keepalive`), for the
+ * final flush on pagehide / tab hide.
+ */
+export const putProgressKeepalive = (id: string, body: Partial<ReadingProgress>) =>
+  apiFetch<ReadingProgress>(`/books/${id}/progress/`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    keepalive: true,
+  });
+
 export const listBookmarks = (id: string) =>
   apiGet<Bookmark[]>(`/books/${id}/bookmarks/`);
 

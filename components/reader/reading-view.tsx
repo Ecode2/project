@@ -15,10 +15,10 @@
  * seeks playback there. It never opens its own reader session.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  AlignLeft, ChevronLeft, Headphones, LogIn, Minus, Pause, Play, Plus, Type,
+  AlignLeft, BookOpen, ChevronLeft, Headphones, LogIn, Minus, Pause, Play, Plus, Type,
 } from "lucide-react";
 
 import {
@@ -26,60 +26,27 @@ import {
 } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { usePlayer } from "@/components/player/player-provider";
-import { getSegments, putReaderSettings } from "@/lib/reader-api";
+import {
+  getSegments, putProgress, putProgressKeepalive, putReaderSettings,
+} from "@/lib/reader-api";
+import {
+  FONTS, MAX_SIZE, MIN_SIZE, THEMES, loadPrefs, savePrefs,
+  type Prefs, type ThemeKey,
+} from "./reader-theme";
 import type { ReaderSettings, Segment, TocEntry } from "@/lib/reader-types";
 import { cn } from "@/lib/utils";
 
 const PAGE = 150;
 
-/**
- * Apple Books' four reading themes. The keys deliberately match the backend's
- * THEME_CHOICES (light/sepia/dark/night) so a choice round-trips through
- * ReaderSettings; only the label follows Books' naming.
- */
-const THEMES = {
-  light: { label: "White", bg: "#FFFFFF", fg: "#16161A", muted: "#8A8A8E" },
-  sepia: { label: "Sepia", bg: "#FBF0D9", fg: "#3B3128", muted: "#8C7B62" },
-  dark:  { label: "Gray",  bg: "#3A3A3C", fg: "#E6E6E8", muted: "#A0A0A6" },
-  night: { label: "Night", bg: "#000000", fg: "#B9B9BE", muted: "#6E6E76" },
-} as const;
-
-type ThemeKey = keyof typeof THEMES;
-
-const FONTS = [
-  { label: "Georgia", stack: 'Georgia, "Times New Roman", serif' },
-  { label: "Palatino", stack: '"Palatino Linotype", Palatino, Georgia, serif' },
-  { label: "New York", stack: 'ui-serif, "New York", Georgia, serif' },
-  { label: "System", stack: 'ui-sans-serif, system-ui, -apple-system, sans-serif' },
-  { label: "Helvetica", stack: 'Helvetica, "Helvetica Neue", Arial, sans-serif' },
-];
-
-const MIN_SIZE = 14;
-const MAX_SIZE = 30;
-const PREFS_KEY = "bookverse.reading-prefs";
-
-interface Prefs {
-  theme: ThemeKey;
-  fontStack: string;
-  fontSize: number;
-}
-
-function loadPrefs(fallback: Prefs): Prefs {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const raw = window.localStorage.getItem(PREFS_KEY);
-    return raw ? { ...fallback, ...JSON.parse(raw) } : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 export function ReadingView({
   settings,
   onSwitchToListen,
+  onSwitchToPages,
 }: {
   settings: ReaderSettings;
   onSwitchToListen: () => void;
+  /** Present when the book is an EPUB/PDF that can be shown as real pages. */
+  onSwitchToPages?: () => void;
 }) {
   const player = usePlayer();
   const router = useRouter();
@@ -113,11 +80,7 @@ export function ReadingView({
 
   const persist = useCallback((next: Prefs) => {
     setPrefs(next);
-    try {
-      window.localStorage.setItem(PREFS_KEY, JSON.stringify(next));
-    } catch {
-      /* private mode: in-memory only */
-    }
+    savePrefs(next);
     // Best-effort sync so the choice follows the reader across devices.
     putReaderSettings({
       theme: next.theme,
@@ -126,37 +89,111 @@ export function ReadingView({
     }).catch(() => {});
   }, []);
 
+  // The first loaded window is centred on the saved position, so the reader
+  // opens on the sentence they stopped at rather than the top of the book (or
+  // the start of the chapter). Earlier text loads as they scroll up.
+  const playerRef = useRef(player);
+  playerRef.current = player;
+  const pendingScrollRef = useRef<number | null>(null);
+  const prependRef = useRef<{ height: number; top: number } | null>(null);
+  const restoredRef = useRef(false);
+  const lastSavedRef = useRef<number | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rafRef = useRef<number | null>(null);
+
+  const fetchWindow = useCallback(
+    async (start: number, count: number) => {
+      if (!bookId) return null;
+      try {
+        return await getSegments(bookId, start, count);
+      } catch {
+        return null;
+      }
+    },
+    [bookId],
+  );
+
   const loadMore = useCallback(async () => {
-    if (!bookId || inFlightRef.current) return;
+    if (!bookId || inFlightRef.current || segments.length === 0) return;
     inFlightRef.current = true;
     setLoading(true);
-    try {
-      const start = segments.length;
-      const res = await getSegments(bookId, start, PAGE);
+    const next = segments[segments.length - 1].index + 1;
+    const res = await fetchWindow(next, PAGE);
+    if (res) {
       setSegments((prev) => {
         // Merge by index: a retry or overlapping window must never duplicate.
-        const seen = new Set(prev.map((s) => s.index));
-        return [...prev, ...res.segments.filter((s) => !seen.has(s.index))];
+        const seen = new Set(prev.map((x) => x.index));
+        return [...prev, ...res.segments.filter((x) => !seen.has(x.index))];
       });
       setTotal(res.total);
-    } catch {
-      /* keep whatever we already have */
-    } finally {
-      inFlightRef.current = false;
-      setLoading(false);
     }
-  }, [bookId, segments.length]);
+    inFlightRef.current = false;
+    setLoading(false);
+  }, [bookId, segments, fetchWindow]);
 
-  // Reset and load the first window when the book changes.
+  const loadBefore = useCallback(async () => {
+    if (!bookId || inFlightRef.current || segments.length === 0) return;
+    const first = segments[0].index;
+    if (first <= 0) return;
+    inFlightRef.current = true;
+    const start = Math.max(0, first - PAGE);
+    const res = await fetchWindow(start, first - start);
+    const el = scrollerRef.current;
+    if (res && el) {
+      prependRef.current = { height: el.scrollHeight, top: el.scrollTop };
+      setSegments((prev) => {
+        const seen = new Set(prev.map((x) => x.index));
+        return [...res.segments.filter((x) => !seen.has(x.index)), ...prev];
+      });
+    }
+    inFlightRef.current = false;
+  }, [bookId, segments, fetchWindow]);
+
+  // Open (or switch) a book: load a window around the saved position.
   useEffect(() => {
     if (!bookId || loadedForRef.current === bookId) return;
     loadedForRef.current = bookId;
+    restoredRef.current = false;
+    lastSavedRef.current = null;
     setSegments([]);
     setTotal(0);
-    inFlightRef.current = false;
-    loadMore();
+    inFlightRef.current = true;
+    setLoading(true);
+    const resume = playerRef.current.segmentIndex || 0;
+    fetchWindow(Math.max(0, resume - 40), PAGE).then((res) => {
+      inFlightRef.current = false;
+      setLoading(false);
+      if (!res) return;
+      pendingScrollRef.current = resume;
+      setSegments(res.segments);
+      setTotal(res.total);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookId]);
+
+  // After segments render: restore the saved spot, or keep the viewport steady
+  // when text was prepended above it.
+  useLayoutEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    if (prependRef.current) {
+      const { height, top } = prependRef.current;
+      el.scrollTop = top + (el.scrollHeight - height);
+      prependRef.current = null;
+      return;
+    }
+    if (pendingScrollRef.current !== null) {
+      const target = el.querySelector<HTMLElement>(
+        `[data-i="${pendingScrollRef.current}"]`,
+      );
+      if (target) {
+        target.scrollIntoView({ block: "start" });
+        pendingScrollRef.current = null;
+        // Let the scroll event this triggers pass before we start saving.
+        requestAnimationFrame(() => { restoredRef.current = true; });
+      }
+    }
+  }, [segments]);
 
   // Follow the narration.
   useEffect(() => {
@@ -164,12 +201,87 @@ export function ReadingView({
     activeRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [player.segmentIndex, player.playing]);
 
-  // Auto-load the next window as the reader nears the end of what is loaded.
+  // -- saving where the reader is ---------------------------------------
+  const chapterFor = useCallback((index: number) => {
+    const toc = (playerRef.current.toc as TocEntry[]) ?? [];
+    let ch = 0;
+    for (const c of toc) {
+      if ((c.start_segment ?? 0) <= index) ch = c.index;
+      else break;
+    }
+    return ch;
+  }, []);
+
+  const flushSave = useCallback((keepalive = false) => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    const idx = lastSavedRef.current;
+    const id = playerRef.current.book?.id;
+    if (idx === null || !id || pendingSaveRef.current !== idx) return;
+    pendingSaveRef.current = null;
+    const body = { segment_index: idx, chapter_index: chapterFor(idx) };
+    (keepalive ? putProgressKeepalive(id, body) : putProgress(id, body)).catch(() => {});
+  }, [chapterFor]);
+  const pendingSaveRef = useRef<number | null>(null);
+
+  const reportPosition = useCallback((index: number) => {
+    // While narrating, the player owns the position (and saves it itself).
+    if (playerRef.current.playing) return;
+    if (lastSavedRef.current === index) return;
+    lastSavedRef.current = index;
+    pendingSaveRef.current = index;
+    playerRef.current.setReadingPosition(index);
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => flushSave(false), 1500);
+  }, [flushSave]);
+
+  // Final flush when the tab is hidden/closed or the view unmounts.
+  useEffect(() => {
+    const onHide = () => flushSave(true);
+    const onVis = () => { if (document.visibilityState === "hidden") flushSave(true); };
+    window.addEventListener("pagehide", onHide);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      document.removeEventListener("visibilitychange", onVis);
+      flushSave(true);
+    };
+  }, [flushSave]);
+
+  // Index of the first paragraph whose bottom is below the top bar.
+  const topVisibleIndex = useCallback((): number | null => {
+    const el = scrollerRef.current;
+    const nodes = el?.querySelectorAll<HTMLElement>("[data-i]");
+    if (!el || !nodes || nodes.length === 0) return null;
+    const line = el.getBoundingClientRect().top + 80;
+    let lo = 0;
+    let hi = nodes.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (nodes[mid].getBoundingClientRect().bottom > line) hi = mid;
+      else lo = mid + 1;
+    }
+    return Number(nodes[lo].dataset.i);
+  }, []);
+
   const onScroll = useCallback(() => {
     const el = scrollerRef.current;
-    if (!el || loading || segments.length >= total) return;
-    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 1200) loadMore();
-  }, [loading, segments.length, total, loadMore]);
+    if (!el) return;
+    if (!loading) {
+      if (el.scrollTop < 900) loadBefore();
+      if (segments.length < total && el.scrollTop + el.clientHeight >= el.scrollHeight - 1200) {
+        loadMore();
+      }
+    }
+    if (!restoredRef.current || rafRef.current !== null) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      const idx = topVisibleIndex();
+      if (idx !== null) reportPosition(idx);
+    });
+  }, [loading, segments.length, total, loadMore, loadBefore, topVisibleIndex, reportPosition]);
 
   const chapters = (player.toc as TocEntry[]) ?? [];
   const currentChapter = chapters[player.chapterIndex];
@@ -216,6 +328,12 @@ export function ReadingView({
         </p>
 
         <div className="flex items-center">
+          {onSwitchToPages && (
+            <button type="button" aria-label="Page view" onClick={onSwitchToPages}
+              className="flex h-11 w-11 items-center justify-center" style={{ color: theme.fg }}>
+              <BookOpen className="h-5 w-5" />
+            </button>
+          )}
           {/* Contents */}
           <Sheet>
             <SheetTrigger asChild>
@@ -366,6 +484,7 @@ export function ReadingView({
               return (
                 <p
                   key={seg.index}
+                  data-i={seg.index}
                   ref={active ? activeRef : undefined}
                   onClick={(e) => {
                     // Seeking is a deliberate action; don't also toggle chrome.
@@ -373,7 +492,7 @@ export function ReadingView({
                     player.seekSegment(seg.index);
                   }}
                   className={cn(
-                    "-mx-2 cursor-pointer rounded-md px-2 transition-colors",
+                    "-mx-2 scroll-mt-20 cursor-pointer rounded-md px-2 transition-colors",
                     heading ? "mb-3 mt-8 font-semibold" : "mb-4",
                     active && player.playing && "bg-primary/15",
                   )}
@@ -412,7 +531,7 @@ export function ReadingView({
               // Narration needs an account; send them to sign in rather than
               // pressing a button that can only fail.
               onClick={() =>
-                player.authRequired ? router.push("/auth") : player.toggle()}
+                player.authRequired ? router.push(`/auth?next=${encodeURIComponent(window.location.pathname + window.location.search)}`) : player.toggle()}
               aria-label={
                 player.authRequired
                   ? "Sign in to listen"

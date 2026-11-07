@@ -21,6 +21,25 @@ export async function checkToken() {
     : { status: false, message: "Not authenticated" };
 }
 
+/** Pull a human message out of a DRF error body ({field: [msgs]} / {detail}). */
+function apiErrorMessage(e: unknown, fallback: string): string {
+  const data = (e as { response?: { data?: unknown } })?.response?.data;
+  if (!data) return "Can't reach the server. Check your connection and try again.";
+  if (typeof data === "string") return fallback;
+  if (typeof data === "object") {
+    const parts: string[] = [];
+    for (const val of Object.values(data as Record<string, unknown>)) {
+      const msgs = Array.isArray(val) ? val : [val];
+      for (const m of msgs) {
+        if (typeof m !== "string") continue;
+        parts.push(m);
+      }
+    }
+    if (parts.length) return parts.join(" ");
+  }
+  return fallback;
+}
+
 export const userInfo = async () => {
   try {
     const response = await api.get(`/auth/profile/`);
@@ -42,8 +61,8 @@ export const login = async (userInfo: LoginInfo) => {
     if (response.status !== 200) return { status: false, message: response.data };
     setAccessToken(response.data.access ?? null);
     return { status: true, message: "SignIn successful" };
-  } catch {
-    return { status: false, message: "Invalid credentials" };
+  } catch (e) {
+    return { status: false, message: apiErrorMessage(e, "Incorrect email or password.") };
   }
 };
 
@@ -60,8 +79,8 @@ export const register = async (userInfo: RegisterInfo) => {
     if (response.status !== 201) return { status: false, message: "Something went wrong" };
     // Auto-login to obtain the access token + refresh cookie.
     return login({ email: userInfo.email, password: userInfo.password });
-  } catch {
-    return { status: false, message: "Something went wrong" };
+  } catch (e) {
+    return { status: false, message: apiErrorMessage(e, "Could not create the account.") };
   }
 };
 

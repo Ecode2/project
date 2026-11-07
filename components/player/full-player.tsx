@@ -161,7 +161,7 @@ export function FullPlayer({ settings }: { settings: ReaderSettings }) {
           </p>
         </div>
         <div className="flex w-full max-w-xs flex-col gap-2">
-          <Button className="h-11 rounded-full" onClick={() => router.push("/auth")}>
+          <Button className="h-11 rounded-full" onClick={() => router.push(`/auth?next=${encodeURIComponent(window.location.pathname + window.location.search)}`)}>
             <LogIn className="mr-2 h-4 w-4" /> Sign in
           </Button>
           <Button variant="ghost" className="h-11 rounded-full"

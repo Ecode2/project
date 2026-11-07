@@ -99,6 +99,8 @@ export type ApiResponse = {
 export interface AuthContextType {
     user: UserInfo | null,
     isAuthenticated: boolean;
+    /** True while the silent session restore on load is still running. */
+    loading: boolean;
     login: (email: string, password: string) => Promise<void>, 
     register: (username: string, email: string, password: string) => Promise<void>, 
     logout: () => void

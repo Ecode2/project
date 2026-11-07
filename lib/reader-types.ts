@@ -73,6 +73,8 @@ export interface ReadingProgress {
   chapter_index: number;
   page: number | null;
   percent: number;
+  /** Page-view position (EPUB CFI / PDF page+offset); {} when unset or stale. */
+  locator?: Record<string, unknown>;
   audio_ms: number;
   updated_at?: string;
 }
